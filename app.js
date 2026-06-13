@@ -275,7 +275,7 @@ const STEPS = [
     run() {
       if (!S.smoothed?.length) { S.svgString = ''; return; }
       const d = BezierPathBuilder.build(S.smoothed, 0.5);
-      S.svgString = makeSVG(d, W, H, P.strokeWidth);
+      S.svgString = makeSVG([{ d, color: 'black' }], W, H, P.strokeWidth);
     },
     draw() {},
     stat() { return S.svgString ? `${(S.svgString.length / 1024).toFixed(1)} KB` : '—'; },
@@ -319,10 +319,13 @@ function drawGradient(ctx, pts, lineWidth = 1) {
   }
 }
 
-function makeSVG(d, w, h, sw) {
+function makeSVG(layers, w, h, sw) {
+  const paths = layers.map(({ d, color }) =>
+    `<path d="${d}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`
+  ).join('\n');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
 <rect width="${w}" height="${h}" fill="white"/>
-<path d="${d}" fill="none" stroke="black" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>
+${paths}
 </svg>`;
 }
 
