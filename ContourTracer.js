@@ -3,9 +3,9 @@ export class ContourTracer {
   static #DY8 = [0, 1, 1,  1,  0, -1, -1, -1];
 
   // binary: Uint8Array (255=foreground, 0=background), width, height
-  // Returns Array<{x,y}[]> — one ordered polyline per region boundary
+  // Returns Array<{x,y}[]> — one ordered polyline per region boundary segment
   static trace(binary, width, height) {
-    // Step 1: find border pixels (foreground with ≥1 background 4-neighbour)
+    // Mark border pixels: foreground pixels with ≥1 background 4-neighbour
     const border = new Uint8Array(binary.length);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -19,59 +19,46 @@ export class ContourTracer {
       }
     }
 
-    // Step 2: BFS to group border pixels into 8-connected components
-    const comp = new Int32Array(binary.length).fill(-1);
-    const components = [];
-    for (let i = 0; i < border.length; i++) {
-      if (!border[i] || comp[i] >= 0) continue;
-      const label = components.length;
-      const pixels = [];
-      const queue = [i];
-      comp[i] = label;
-      while (queue.length) {
-        const idx = queue.pop();
-        pixels.push(idx);
-        const cx = idx % width, cy = (idx / width) | 0;
-        for (let d = 0; d < 8; d++) {
-          const nx = cx + this.#DX8[d], ny = cy + this.#DY8[d];
-          if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-          const ni = ny * width + nx;
-          if (!border[ni] || comp[ni] >= 0) continue;
-          comp[ni] = label;
-          queue.push(ni);
+    // Greedy chain tracing: scan top-to-bottom left-to-right.
+    // Start a new chain at each unvisited border pixel; follow 8-connected
+    // neighbours until stuck. Dead ends simply trigger a new chain from the
+    // next unvisited pixel — no pixels are abandoned.
+    const visited = new Uint8Array(binary.length);
+    const contours = [];
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        if (!border[i] || visited[i]) continue;
+
+        const chain = [];
+        let cx = x, cy = y;
+
+        while (true) {
+          const ci = cy * width + cx;
+          if (visited[ci]) break;
+          visited[ci] = 1;
+          chain.push({ x: cx, y: cy });
+
+          let moved = false;
+          for (let d = 0; d < 8; d++) {
+            const nx = cx + this.#DX8[d];
+            const ny = cy + this.#DY8[d];
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+            const ni = ny * width + nx;
+            if (border[ni] && !visited[ni]) {
+              cx = nx; cy = ny;
+              moved = true;
+              break;
+            }
+          }
+          if (!moved) break;
         }
-      }
-      components.push(pixels);
-    }
 
-    // Step 3: order each component as a greedy 8-connected chain
-    return components.map(pixels => this.#orderChain(pixels, width));
-  }
-
-  static #orderChain(pixels, width) {
-    if (pixels.length <= 2) {
-      return pixels.map(i => ({ x: i % width, y: (i / width) | 0 }));
-    }
-
-    // Build lookup set and sort to find topmost-leftmost start
-    const inSet = new Set(pixels);
-    pixels.sort((a, b) => ((a / width) | 0) - ((b / width) | 0) || a % width - b % width);
-
-    const visited = new Set();
-    const chain = [];
-    let cur = pixels[0];
-
-    while (cur !== undefined) {
-      visited.add(cur);
-      chain.push({ x: cur % width, y: (cur / width) | 0 });
-      const cx = cur % width, cy = (cur / width) | 0;
-      cur = undefined;
-      for (let d = 0; d < 8; d++) {
-        const nx = cx + ContourTracer.#DX8[d], ny = cy + ContourTracer.#DY8[d];
-        const ni = ny * width + nx;
-        if (inSet.has(ni) && !visited.has(ni)) { cur = ni; break; }
+        if (chain.length >= 3) contours.push(chain);
       }
     }
-    return chain;
+
+    return contours;
   }
 }
