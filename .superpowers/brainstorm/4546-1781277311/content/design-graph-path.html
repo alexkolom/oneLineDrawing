@@ -1,0 +1,63 @@
+<h2>Design: Junction Graph + Path Planning</h2>
+<p class="subtitle">Section 3 of 4 — the core of what makes the line feel artistic rather than mechanical.</p>
+
+<div class="section">
+  <h3>Step 1: Build the junction graph from skeleton</h3>
+  <p style="font-size:13px">After Zhang-Suen thinning, every edge pixel is exactly 1px wide. We classify each lit pixel by how many lit neighbors it has:</p>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
+    <div style="padding:10px 14px;background:#1a2a1a;border-radius:6px;border:1px solid #3a5a3a;flex:1;min-width:140px">
+      <div style="font-family:monospace;color:#5aba7a;font-size:13px;font-weight:600">Endpoint</div>
+      <div style="color:#aaa;font-size:12px;margin-top:4px">exactly 1 neighbor — a tip, a line end</div>
+    </div>
+    <div style="padding:10px 14px;background:#1a1a2a;border-radius:6px;border:1px solid #3a3a7a;flex:1;min-width:140px">
+      <div style="font-family:monospace;color:#7a7aff;font-size:13px;font-weight:600">Path pixel</div>
+      <div style="color:#aaa;font-size:12px;margin-top:4px">exactly 2 neighbors — interior of a branch</div>
+    </div>
+    <div style="padding:10px 14px;background:#2a1a1a;border-radius:6px;border:1px solid #7a3a3a;flex:1;min-width:140px">
+      <div style="font-family:monospace;color:#ff7a7a;font-size:13px;font-weight:600">Junction</div>
+      <div style="color:#aaa;font-size:12px;margin-top:4px">3+ neighbors — a fork, a crossing</div>
+    </div>
+  </div>
+  <p style="font-size:13px;margin-top:12px">From endpoints and junctions, trace branches: walk along path pixels until you hit the next endpoint or junction. Each branch stores its pixel sequence (for smooth spline fitting later) and its length. Prune branches shorter than <code>0.02 × d</code>.</p>
+</div>
+
+<div class="section">
+  <h3>Step 2: Weight branches by importance</h3>
+  <p style="font-size:13px">Not all edges are equal. We want the silhouette to dominate. Each branch gets a weight:</p>
+  <div style="font-family:monospace;font-size:12px;background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:12px;margin-top:8px">
+    weight = branchLength × (1 + silhouetteBonus × isSilhouette)
+  </div>
+  <p style="font-size:13px;margin-top:10px"><code>isSilhouette</code> = 1 if this branch borders the image's background region (white/transparent pixels adjacent to edge pixels). <code>silhouetteBonus</code> defaults to 2.0 — silhouette edges are treated as 3× as important as interior edges. This is the "C insight" baked into approach B.</p>
+</div>
+
+<div class="section">
+  <h3>Step 3: DFS spanning tree → Euler tour</h3>
+  <p style="font-size:13px">We want one continuous path through all branches. The strategy:</p>
+  <ol style="font-size:13px;color:#ccc;padding-left:20px;line-height:1.8">
+    <li>Build a <strong>maximum spanning tree</strong> of the graph (Kruskal's, using branch weights). This selects the most important subset of branches that keeps everything connected.</li>
+    <li>A tree has all nodes at odd or even degree. For an Euler tour, every node must have <em>even</em> degree. Add duplicate (ghost) copies of the minimum-weight edges needed to fix odd-degree nodes — this is the <strong>Chinese Postman</strong> trick. Each ghost edge will be traversed as a smooth connector, not a visible retrace.</li>
+    <li>Run <strong>Hierholzer's algorithm</strong> to extract a single Euler circuit. At each junction, prefer unvisited real edges over ghost edges, and among real edges prefer the longest branch — this keeps the line flowing along structure rather than darting around.</li>
+  </ol>
+  <p style="font-size:13px;margin-top:8px;color:#7c6fff">Result: one closed loop that visits every important branch exactly once, with short ghost connectors linking disconnected regions. Ghost connectors become the invisible pen-up moves (or very short drawn jumps) only when the distance exceeds <code>maxJump × d</code>.</p>
+</div>
+
+<div class="section">
+  <h3>Step 4: Catmull-Rom spline fitting</h3>
+  <p style="font-size:13px">The Euler tour gives an ordered list of skeleton pixels. We don't draw pixel-by-pixel — we subsample the path at every ~<code>0.005 × d</code> pixels (keeping only shape-defining points), then fit a Catmull-Rom spline through them. Catmull-Rom passes through its control points (unlike Chaikin which shrinks them), producing curves that faithfully follow the skeleton without over-smoothing sharp corners.</p>
+  <p style="font-size:13px;margin-top:8px">The spline is converted to cubic Bézier segments for SVG — compatible with the existing SVG exporter.</p>
+</div>
+
+<div class="section" style="background:rgba(124,111,255,0.08);border-radius:8px;border-left:3px solid #7c6fff;padding:14px">
+  <p class="label">New modules required</p>
+  <div style="font-size:12px;font-family:monospace;line-height:2">
+    <div><span style="color:#5aba7a">Skeletonizer.js</span> <span style="color:#666">— Zhang-Suen thinning</span></div>
+    <div><span style="color:#5aba7a">SkeletonGraph.js</span> <span style="color:#666">— junction detection + branch tracing + pruning + silhouette weighting</span></div>
+    <div><span style="color:#5aba7a">PathPlanner.js</span> <span style="color:#666">— MST + Chinese Postman + Hierholzer Euler circuit</span></div>
+    <div><span style="color:#ffaa44">EdgeDetector.js</span> <span style="color:#666">— add hysteresis to existing NMS (small addition)</span></div>
+    <div><span style="color:#ffaa44">BezierPathBuilder.js</span> <span style="color:#666">— replace Chaikin input with Catmull-Rom output</span></div>
+    <div><span style="color:#ffaa44">app.js</span> <span style="color:#666">— rewire pipeline steps + size-agnostic params throughout</span></div>
+  </div>
+  <p style="font-size:11px;color:#888;margin-top:8px">Green = new files. Orange = modifications to existing files. ContourTracer, KDTreeConnector, Eulerizer, GraphBuilder, RDPSimplifier, ChaikinSmoother are retired.</p>
+</div>
+
+<p class="subtitle" style="margin-top:16px">Does this path planning approach make sense? Last section covers the new step-card UI and what gets removed. Say "good" to continue.</p>

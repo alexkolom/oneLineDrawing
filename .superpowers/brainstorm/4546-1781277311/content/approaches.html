@@ -1,0 +1,49 @@
+<h2>Three approaches to improve the pipeline</h2>
+<p class="subtitle">Each trades implementation effort against output quality. Pick the one that feels right.</p>
+
+<div class="options">
+
+  <div class="option" data-choice="evolutionary" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Evolutionary — patch the current pipeline</h3>
+      <p>Keep the posterize→regionBoundaries flow. Fix the worst pain points: normalize all parameters by image diagonal so they're size-agnostic; improve junction handling in ContourTracer so it makes smarter choices at forks; add a depth-first spanning tree traversal to replace the chaotic greedy connector.</p>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Low risk — preserves what works</li><li>Fastest to ship</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>regionBoundaries produces blocky grid-like edges, not organic contours — this is the root cause of "looks graphical not artistic" and can't be fully fixed by patching downstream</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="architectural" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Architectural rewrite — Canny → Skeleton → Graph → DFS path <span style="font-size:11px;color:#7c6fff;font-weight:600;margin-left:6px">RECOMMENDED</span></h3>
+      <p>Follow the academic pipeline: replace edge detection with Canny (nonMaxSuppression already exists in EdgeDetector.js); add Zhang-Suen skeletonization to thin edges to 1-pixel centerlines; build a proper junction graph (nodes = endpoints + junctions, edges = skeleton branches); plan the path with a DFS spanning tree biased toward long/prominent branches; fit B-spline through the result. All parameters expressed as fractions of image diagonal.</p>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Produces organic, flowing lines — addresses the root cause</li><li>Junction graph enables artistically intelligent path decisions</li><li>Naturally size-agnostic</li><li>Most closely matches how artists actually draw</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Requires new Skeletonizer and JunctionGraph modules (~3–4 new files)</li><li>More moving parts to tune</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="silhouette-first" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Silhouette-first — exploit the clean background</h3>
+      <p>Since the background is removed, extract the outer contour explicitly (largest connected boundary). Then find 2–3 tiers of interior structural edges (by gradient strength). Route a single loop: start on the silhouette, spiral inward through interior features, return to the silhouette. Jumps only when interior features are genuinely disconnected islands.</p>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Perfectly matched to the Minimal Silhouette aesthetic</li><li>Silhouette always gets priority — the subject is never lost</li><li>Simpler than full graph rewrite</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Brittle — breaks badly if background isn't cleanly removed</li><li>Interior routing is still heuristic, not graph-principled</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:24px;padding:16px;background:rgba(124,111,255,0.08);border-radius:8px;border-left:3px solid #7c6fff">
+  <p class="label">My take</p>
+  <p style="margin:6px 0 0">B is the right architectural move — it fixes the root cause and builds infrastructure that makes further artistic tuning tractable. C's silhouette insight can be layered on top of B: use the background mask to <em>weight</em> the silhouette edges highest when building the DFS spanning tree. Best of both.</p>
+</div>
+
+<p class="subtitle" style="margin-top:16px">Click your choice above, or tell me in the terminal.</p>

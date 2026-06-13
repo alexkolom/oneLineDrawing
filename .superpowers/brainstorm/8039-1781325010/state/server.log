@@ -1,0 +1,4 @@
+{"type":"server-started","port":55496,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:55496","screen_dir":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/8039-1781325010/content","state_dir":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/8039-1781325010/state"}
+{"type":"screen-added","file":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/8039-1781325010/content/drawing-styles.html"}
+{"type":"screen-added","file":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/8039-1781325010/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

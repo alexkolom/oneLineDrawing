@@ -1,0 +1,11 @@
+{"type":"server-started","port":58825,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:58825","screen_dir":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/4546-1781277311/content","state_dir":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/4546-1781277311/state"}
+{"type":"screen-added","file":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/4546-1781277311/content/aesthetic-style.html"}
+{"source":"user-event","type":"click","text":"A — Minimal Silhouette\n      One clean line traces the outer contour and a few key interior features. Picasso / minimalist portrait style. Very sparse — the subject is recognisable but abstracted.\n      Algorithm focus: dominant silhouette extraction, depth-discontinuity edges, minimal interior detail","choice":"silhouette","id":null,"timestamp":1781277408836}
+{"source":"user-event","type":"click","text":"A — Minimal Silhouette\n      One clean line traces the outer contour and a few key interior features. Picasso / minimalist portrait style. Very sparse — the subject is recognisable but abstracted.\n      Algorithm focus: dominant silhouette extraction, depth-discontinuity edges, minimal interior detail","choice":"silhouette","id":null,"timestamp":1781277417452}
+{"type":"screen-added","file":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/4546-1781277311/content/waiting-1.html"}
+{"type":"screen-added","file":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/4546-1781277311/content/approaches.html"}
+{"type":"screen-added","file":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/4546-1781277311/content/design-pipeline.html"}
+{"type":"screen-added","file":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/4546-1781277311/content/design-params.html"}
+{"type":"screen-added","file":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/4546-1781277311/content/design-graph-path.html"}
+{"type":"screen-added","file":"/Users/alex/GitProjects/singleLine/.superpowers/brainstorm/4546-1781277311/content/design-ui.html"}
+{"type":"server-stopped","reason":"idle timeout"}

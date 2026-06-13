@@ -1,0 +1,71 @@
+<h2>Design: Size-Agnostic Parameters</h2>
+<p class="subtitle">Section 2 of 4 — all pixel-based thresholds expressed as fractions of image diagonal.</p>
+
+<div class="section">
+  <h3>The problem</h3>
+  <p style="font-size:13px">All current parameters are in absolute pixels. A 600px image and a 300px image get the same <code>minContourLen: 20</code>, so the 300px image loses twice as much detail. The fix: express everything as a fraction of the image diagonal <code>d = √(W² + H²)</code>. The diagonal is scale-invariant and captures both dimensions.</p>
+</div>
+
+<div class="section">
+  <h3>Parameter table</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="border-bottom:1px solid #333">
+        <th style="text-align:left;padding:6px 8px;color:#888;width:20%">Parameter</th>
+        <th style="text-align:left;padding:6px 8px;color:#888;width:18%">Old (absolute px)</th>
+        <th style="text-align:left;padding:6px 8px;color:#888;width:22%">New (fraction of d)</th>
+        <th style="text-align:left;padding:6px 8px;color:#888">Effect</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #222">
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">blurSigma</td>
+        <td style="padding:6px 8px;font-family:monospace">radius = 1</td>
+        <td style="padding:6px 8px;font-family:monospace">0.006 × d</td>
+        <td style="padding:6px 8px;color:#aaa">600px image → σ≈5px. Controls texture suppression before edge detection.</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222">
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">cannyHigh</td>
+        <td style="padding:6px 8px;font-family:monospace">threshold = fixed</td>
+        <td style="padding:6px 8px;font-family:monospace">0.15 (of max grad)</td>
+        <td style="padding:6px 8px;color:#aaa">Relative to gradient magnitude max — already scale-invariant.</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222">
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">cannyLow</td>
+        <td style="padding:6px 8px;font-family:monospace">—</td>
+        <td style="padding:6px 8px;font-family:monospace">0.05 (of max grad)</td>
+        <td style="padding:6px 8px;color:#aaa">Hysteresis lower bound. Weak edges survive only if touching a strong one.</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222">
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">minBranchLen</td>
+        <td style="padding:6px 8px;font-family:monospace">minContourLen = 20</td>
+        <td style="padding:6px 8px;font-family:monospace">0.02 × d</td>
+        <td style="padding:6px 8px;color:#aaa">600px → 16px. Prunes tiny skeleton branches that would create noise in the path.</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222">
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">maxJump</td>
+        <td style="padding:6px 8px;font-family:monospace">maxJumpDist = 60</td>
+        <td style="padding:6px 8px;font-family:monospace">0.08 × d</td>
+        <td style="padding:6px 8px;color:#aaa">600px → 64px. Max pen-up distance before we insert a null gap instead of drawing.</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">splineTension</td>
+        <td style="padding:6px 8px;font-family:monospace">smoothIterations = 3</td>
+        <td style="padding:6px 8px;font-family:monospace">0.0–1.0 (unitless)</td>
+        <td style="padding:6px 8px;color:#aaa">Catmull-Rom tension. 0 = loose/curvy, 1 = follows points tightly. Default 0.5.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>MAX_SIZE stays, but params scale with it</h3>
+  <p style="font-size:13px">The 600px cap is useful for performance. We keep it. The point is that if you change it to 1200px (or remove it entirely), all the parameters automatically produce the same <em>visual effect</em> — because they're fractions of the diagonal, not hardcoded pixel counts. The UI sliders will show the fraction values (e.g. "0.02") with a live px preview for the current image.</p>
+</div>
+
+<div class="section">
+  <h3>Slider UX change</h3>
+  <p style="font-size:13px">Current sliders show raw pixel values. New sliders show the fraction + a parenthetical pixel equivalent computed from the current image's diagonal. Example: <code>Min Branch  0.020  (≈ 16 px)</code>. This makes tuning intuitive regardless of input size.</p>
+</div>
+
+<p class="subtitle">Does this parameter strategy make sense? Say "good" or ask anything — next section covers the junction graph + DFS path planning in detail.</p>

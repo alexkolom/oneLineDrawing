@@ -1,0 +1,94 @@
+<h2>Design: Updated Pipeline UI</h2>
+<p class="subtitle">Section 4 of 4 — what the step cards look like after the rewrite.</p>
+
+<div class="section">
+  <h3>New step sequence (12 cards → 10 cards)</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="border-bottom:1px solid #333">
+        <th style="text-align:left;padding:5px 8px;color:#888;width:6%">#</th>
+        <th style="text-align:left;padding:5px 8px;color:#888;width:26%">Step</th>
+        <th style="text-align:left;padding:5px 8px;color:#888;width:30%">Controls (all size-agnostic)</th>
+        <th style="text-align:left;padding:5px 8px;color:#888">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #1a1a1a">
+        <td style="padding:5px 8px;color:#666">01</td>
+        <td style="padding:5px 8px">Original Image</td>
+        <td style="padding:5px 8px;color:#555">—</td>
+        <td style="padding:5px 8px;color:#666">unchanged</td>
+      </tr>
+      <tr style="border-bottom:1px solid #1a1a1a">
+        <td style="padding:5px 8px;color:#666">02</td>
+        <td style="padding:5px 8px">Grayscale</td>
+        <td style="padding:5px 8px;color:#555">—</td>
+        <td style="padding:5px 8px;color:#666">unchanged</td>
+      </tr>
+      <tr style="border-bottom:1px solid #1a1a1a">
+        <td style="padding:5px 8px;color:#666">03</td>
+        <td style="padding:5px 8px">Levels</td>
+        <td style="padding:5px 8px;color:#aaa">Black Pt, White Pt, Gamma</td>
+        <td style="padding:5px 8px;color:#666">unchanged</td>
+      </tr>
+      <tr style="border-bottom:1px solid #1a1a1a">
+        <td style="padding:5px 8px;color:#5aba7a">04</td>
+        <td style="padding:5px 8px;color:#5aba7a">Canny Edges</td>
+        <td style="padding:5px 8px;color:#aaa">Blur σ (0–0.02×d), High thresh, Low thresh</td>
+        <td style="padding:5px 8px;color:#5aba7a">new — replaces Posterize + Median + RegionBounds</td>
+      </tr>
+      <tr style="border-bottom:1px solid #1a1a1a">
+        <td style="padding:5px 8px;color:#5aba7a">05</td>
+        <td style="padding:5px 8px;color:#5aba7a">Skeleton</td>
+        <td style="padding:5px 8px;color:#555">—</td>
+        <td style="padding:5px 8px;color:#5aba7a">new — Zhang-Suen thinning</td>
+      </tr>
+      <tr style="border-bottom:1px solid #1a1a1a">
+        <td style="padding:5px 8px;color:#5aba7a">06</td>
+        <td style="padding:5px 8px;color:#5aba7a">Junction Graph</td>
+        <td style="padding:5px 8px;color:#aaa">Min Branch (0.005–0.05×d), Silhouette Bonus</td>
+        <td style="padding:5px 8px;color:#5aba7a">new — replaces ContourTrace + RDP + GreedyConnect</td>
+      </tr>
+      <tr style="border-bottom:1px solid #1a1a1a">
+        <td style="padding:5px 8px;color:#5aba7a">07</td>
+        <td style="padding:5px 8px;color:#5aba7a">Euler Path</td>
+        <td style="padding:5px 8px;color:#aaa">Max Jump (0.02–0.2×d)</td>
+        <td style="padding:5px 8px;color:#5aba7a">new — MST + Chinese Postman + Hierholzer</td>
+      </tr>
+      <tr style="border-bottom:1px solid #1a1a1a">
+        <td style="padding:5px 8px;color:#5aba7a">08</td>
+        <td style="padding:5px 8px;color:#5aba7a">Smooth Spline</td>
+        <td style="padding:5px 8px;color:#aaa">Tension (0–1), Sample rate</td>
+        <td style="padding:5px 8px;color:#5aba7a">new — Catmull-Rom replaces Chaikin</td>
+      </tr>
+      <tr style="border-bottom:1px solid #1a1a1a">
+        <td style="padding:5px 8px;color:#ffaa44">09</td>
+        <td style="padding:5px 8px;color:#ffaa44">Single Line Output</td>
+        <td style="padding:5px 8px;color:#aaa">Stroke Width</td>
+        <td style="padding:5px 8px;color:#ffaa44">unchanged logic, wired to new path</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>Files retired</h3>
+  <p style="font-size:12px;font-family:monospace;color:#a04040;line-height:2">
+    ContourTracer.js &nbsp;·&nbsp; ContourGraph.js &nbsp;·&nbsp; GraphBuilder.js &nbsp;·&nbsp; GraphNode.js &nbsp;·&nbsp; GraphEdge.js<br>
+    KDTreeConnector.js &nbsp;·&nbsp; Eulerizer.js &nbsp;·&nbsp; EulerPathSolver.js &nbsp;·&nbsp; RDPSimplifier.js &nbsp;·&nbsp; ChaikinSmoother.js &nbsp;·&nbsp; Pipeline.js
+  </p>
+  <p style="font-size:11px;color:#666;margin-top:4px">11 files deleted, 3 new files added. Net reduction in codebase size.</p>
+</div>
+
+<div class="section" style="background:rgba(90,186,122,0.07);border-radius:8px;border-left:3px solid #5aba7a;padding:14px">
+  <p class="label">Summary of what this delivers</p>
+  <ul style="font-size:13px;color:#ccc;padding-left:18px;line-height:1.9;margin-top:6px">
+    <li>Organic, flowing contours — Canny finds real gradient edges, not posterization grid lines</li>
+    <li>Artistically coherent path — silhouette drawn first, interior features follow structure</li>
+    <li>Truly single stroke in most cases — Euler circuit guarantees no pen-ups unless gap exceeds maxJump</li>
+    <li>Size-agnostic — all params scale with diagonal, same visual result at any resolution</li>
+    <li>Simpler codebase — 11 files retired, cleaner separation of concerns</li>
+  </ul>
+</div>
+
+<p class="subtitle" style="margin-top:16px">That's the full design. Reply in terminal to confirm and I'll write it up as a spec doc.</p>

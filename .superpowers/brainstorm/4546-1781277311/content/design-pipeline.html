@@ -1,0 +1,103 @@
+<h2>Design: New Pipeline Architecture</h2>
+<p class="subtitle">Section 1 of 4 — overall structure. The old flow is replaced from step 4 onward.</p>
+
+<div class="section">
+  <h3>Old pipeline (current)</h3>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-family:monospace;font-size:12px">
+    <span style="padding:4px 8px;background:#2a2a2a;border-radius:4px;border:1px solid #444">Grayscale</span>
+    <span style="color:#666">→</span>
+    <span style="padding:4px 8px;background:#2a2a2a;border-radius:4px;border:1px solid #444">Levels</span>
+    <span style="color:#666">→</span>
+    <span style="padding:4px 8px;background:#6b3a3a;border-radius:4px;border:1px solid #a04040">Posterize</span>
+    <span style="color:#666">→</span>
+    <span style="padding:4px 8px;background:#6b3a3a;border-radius:4px;border:1px solid #a04040">Median</span>
+    <span style="color:#666">→</span>
+    <span style="padding:4px 8px;background:#6b3a3a;border-radius:4px;border:1px solid #a04040">RegionBounds</span>
+    <span style="color:#666">→</span>
+    <span style="padding:4px 8px;background:#6b3a3a;border-radius:4px;border:1px solid #a04040">ContourTrace</span>
+    <span style="color:#666">→</span>
+    <span style="padding:4px 8px;background:#6b3a3a;border-radius:4px;border:1px solid #a04040">RDP</span>
+    <span style="color:#666">→</span>
+    <span style="padding:4px 8px;background:#6b3a3a;border-radius:4px;border:1px solid #a04040">GreedyConnect</span>
+    <span style="color:#666">→</span>
+    <span style="padding:4px 8px;background:#6b3a3a;border-radius:4px;border:1px solid #a04040">Chaikin</span>
+    <span style="color:#666">→</span>
+    <span style="padding:4px 8px;background:#2a2a2a;border-radius:4px;border:1px solid #444">Bezier SVG</span>
+  </div>
+  <p style="font-size:11px;color:#a04040;margin-top:8px">Red = root problem: region boundaries produce blocky grid edges; downstream steps can't recover artistic quality lost here.</p>
+</div>
+
+<div class="section">
+  <h3>New pipeline</h3>
+  <div style="display:flex;flex-direction:column;gap:10px">
+
+    <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-family:monospace;font-size:12px">
+      <span style="padding:4px 8px;background:#2a2a2a;border-radius:4px;border:1px solid #555">Grayscale</span>
+      <span style="color:#666">→</span>
+      <span style="padding:4px 8px;background:#2a2a2a;border-radius:4px;border:1px solid #555">Levels</span>
+      <span style="color:#666">→</span>
+      <span style="padding:4px 8px;background:#1a3a2a;border-radius:4px;border:1px solid #3a7a5a">Blur (σ-scaled)</span>
+      <span style="color:#666">→</span>
+      <span style="padding:4px 8px;background:#1a3a2a;border-radius:4px;border:1px solid #3a7a5a">Canny + Hysteresis</span>
+      <span style="color:#666">→</span>
+      <span style="padding:4px 8px;background:#1a3a2a;border-radius:4px;border:1px solid #3a7a5a">Zhang-Suen Skeleton</span>
+      <span style="color:#666">→</span>
+      <span style="padding:4px 8px;background:#1a3a2a;border-radius:4px;border:1px solid #3a7a5a">Junction Graph</span>
+      <span style="color:#666">→</span>
+      <span style="padding:4px 8px;background:#1a3a2a;border-radius:4px;border:1px solid #3a7a5a">DFS Path</span>
+      <span style="color:#666">→</span>
+      <span style="padding:4px 8px;background:#1a3a2a;border-radius:4px;border:1px solid #3a7a5a">Smooth Spline</span>
+      <span style="color:#666">→</span>
+      <span style="padding:4px 8px;background:#2a2a2a;border-radius:4px;border:1px solid #555">SVG</span>
+    </div>
+    <p style="font-size:11px;color:#3a9a6a;margin-top:2px">Green = new or rewritten. The first two steps are unchanged.</p>
+
+  </div>
+</div>
+
+<div class="section">
+  <h3>What each new step does</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="border-bottom:1px solid #333">
+        <th style="text-align:left;padding:6px 8px;color:#888;font-weight:600;width:20%">Step</th>
+        <th style="text-align:left;padding:6px 8px;color:#888;font-weight:600">Purpose</th>
+        <th style="text-align:left;padding:6px 8px;color:#888;font-weight:600;width:28%">Key change vs now</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #222">
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">Blur (σ-scaled)</td>
+        <td style="padding:6px 8px">Gaussian blur with σ = 0.006 × diagonal. Removes high-frequency texture while preserving structural edges.</td>
+        <td style="padding:6px 8px;color:#888">Was: fixed radius in pixels → broke on different image sizes</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222">
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">Canny + Hysteresis</td>
+        <td style="padding:6px 8px">NMS already exists. Add double-threshold hysteresis: strong edges lock in, weak edges survive only if connected to a strong one. Produces clean, continuous contours.</td>
+        <td style="padding:6px 8px;color:#888">Was: posterize → regionBoundaries → blocky grid artifacts</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222">
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">Zhang-Suen Skeleton</td>
+        <td style="padding:6px 8px">Iterative thinning until edges are 1-pixel-wide centerlines. Preserves topology (no disconnections). Required for principled graph construction.</td>
+        <td style="padding:6px 8px;color:#888">Was: contours already 1px (regionBoundaries), but structurally messy</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222">
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">Junction Graph</td>
+        <td style="padding:6px 8px">Scan skeleton: classify each pixel as junction (3+ neighbors), endpoint (1 neighbor), or path pixel. Trace branches between junctions/endpoints. Prune branches shorter than 0.015 × diagonal.</td>
+        <td style="padding:6px 8px;color:#888">Was: no graph — greedy endpoint matching with no structure awareness</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222">
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">DFS Path</td>
+        <td style="padding:6px 8px">Build MST of the graph weighted by branch length (longer = more important). DFS traversal of MST yields a single Euler tour where each branch is visited going in and coming back. At junctions: choose longest unvisited branch first. Add minimum-weight edges to make all nodes even-degree → guaranteed single closed loop.</td>
+        <td style="padding:6px 8px;color:#888">Was: greedy nearest-endpoint → chaotic jumps with no artistic coherence</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 8px;color:#7c6fff;font-family:monospace">Smooth Spline</td>
+        <td style="padding:6px 8px">Fit Catmull-Rom spline through path points (replaces Chaikin corner-cutting). Tension parameter controls looseness. Output as cubic Bezier segments in SVG.</td>
+        <td style="padding:6px 8px;color:#888">Was: Chaikin doubles point count each pass → over-smoothed, loses character</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="subtitle">Does this overall structure look right? Reply in terminal — next section covers the size-agnostic parameter strategy.</p>

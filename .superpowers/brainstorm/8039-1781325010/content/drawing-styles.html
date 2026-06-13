@@ -1,0 +1,165 @@
+<h2>Three Single-Line Drawing Styles</h2>
+<p class="subtitle">Which direction feels right for the output you want?</p>
+
+<div class="cards" style="gap:24px">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)" style="flex:1;min-width:220px">
+    <div class="card-image" style="background:#fff;padding:16px;display:flex;justify-content:center;align-items:center;min-height:240px">
+      <svg viewBox="0 0 200 240" width="180" height="216" xmlns="http://www.w3.org/2000/svg">
+        <!-- Clean contour portrait - minimal strokes, highly readable -->
+        <path d="
+          M 100 20
+          C 130 20, 160 40, 165 75
+          C 170 110, 160 145, 148 162
+          C 140 172, 128 178, 118 182
+          C 112 185, 108 188, 100 192
+          C 92 188, 88 185, 82 182
+          C 72 178, 60 172, 52 162
+          C 40 145, 30 110, 35 75
+          C 40 40, 70 20, 100 20
+
+          M 72 90 C 72 84, 78 80, 84 80 C 90 80, 96 84, 96 90 C 96 96, 90 100, 84 100 C 78 100, 72 96, 72 90
+          M 96 90 C 96 88, 97 87, 100 87
+
+          M 104 87 C 107 87, 108 88, 108 90
+          M 104 80 C 110 80, 116 84, 116 90 C 116 96, 110 100, 104 100 C 98 100, 108 90, 116 90
+
+          M 95 115 C 97 112, 100 111, 103 112 C 105 113, 107 115, 107 115
+          M 90 122 C 94 128, 100 130, 106 128 C 110 126, 113 122, 113 122
+
+          M 68 75 C 72 68, 82 65, 90 67
+          M 110 67 C 118 65, 128 68, 132 75
+
+          M 70 55 C 75 45, 88 42, 100 44 C 112 42, 125 45, 130 55
+        " fill="none" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- ears -->
+        <path d="M 35 88 C 28 85, 22 92, 24 102 C 26 112, 34 115, 38 110
+                 M 165 88 C 172 85, 178 92, 176 102 C 174 112, 166 115, 162 110"
+          fill="none" stroke="#111" stroke-width="1.8" stroke-linecap="round"/>
+        <!-- neck -->
+        <path d="M 82 182 C 78 196, 72 210, 68 230
+                 M 118 182 C 122 196, 128 210, 132 230"
+          fill="none" stroke="#111" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>A — Clean Contour</h3>
+      <p>Minimal lines. Only essential outlines. High readability, iconic feel. Like those viral one-line portraits.</p>
+      <p style="color:#4CAF50;font-size:12px;font-weight:600;margin-top:8px">← Recommended direction</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)" style="flex:1;min-width:220px">
+    <div class="card-image" style="background:#fff;padding:16px;display:flex;justify-content:center;align-items:center;min-height:240px">
+      <svg viewBox="0 0 200 240" width="180" height="216" xmlns="http://www.w3.org/2000/svg">
+        <!-- Gestural/sketchy - wobbly lines, expressive -->
+        <path d="
+          M 100 22
+          C 127 18, 158 35, 166 72
+          C 171 98, 166 130, 160 148
+          C 153 166, 140 175, 128 181
+          C 116 187, 107 191, 100 193
+          C 91 191, 81 186, 70 180
+          C 57 172, 44 160, 38 142
+          C 28 118, 27 85, 36 62
+          C 46 36, 72 18, 100 22
+
+          M 73 93 C 72 86, 75 79, 82 78 C 88 77, 95 82, 97 89 C 99 97, 95 103, 88 104 C 80 105, 73 100, 73 93
+          M 97 89 L 103 88
+
+          M 103 89 C 105 82, 111 78, 117 79 C 124 80, 128 87, 127 94 C 126 101, 120 105, 113 104 C 106 103, 102 96, 103 89
+
+          M 94 117 C 97 113, 101 112, 104 114 C 107 116, 108 118, 108 118
+          M 88 125 C 91 131, 96 134, 102 133 C 109 131, 113 125, 115 123
+
+          M 66 77 C 70 68, 81 64, 91 67
+          M 109 67 C 119 64, 130 68, 134 77
+
+          M 80 184 C 75 195, 70 212, 66 232
+          M 120 184 C 125 195, 130 212, 134 232
+
+          M 38 90 C 30 87, 23 94, 25 105 C 27 115, 35 118, 40 113
+          M 162 90 C 170 87, 177 94, 175 105 C 173 115, 165 118, 160 113
+
+          M 68 55 C 73 44, 86 41, 98 43
+          M 102 43 C 114 41, 127 44, 132 55
+        " fill="none" stroke="#222" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"
+           style="filter: url(#wobble)"/>
+        <defs>
+          <feTurbulence type="turbulence" baseFrequency="0.065" numOctaves="2" result="noise" id="turb"/>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G" result="wobbled"/>
+          <filter id="wobble" x="-5%" y="-5%" width="110%" height="110%">
+            <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" result="noise"/>
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="4" xChannelSelector="R" yChannelSelector="G"/>
+          </filter>
+        </defs>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>B — Gestural / Sketchy</h3>
+      <p>Loose, expressive, imperfect. Lines wobble and cross. Feels hand-drawn and alive.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)" style="flex:1;min-width:220px">
+    <div class="card-image" style="background:#fff;padding:16px;display:flex;justify-content:center;align-items:center;min-height:240px">
+      <svg viewBox="0 0 200 240" width="180" height="216" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <clipPath id="face-clip">
+            <ellipse cx="100" cy="110" rx="68" ry="90"/>
+          </clipPath>
+        </defs>
+        <!-- TSP-art style: dense wave pattern that builds up tonal areas -->
+        <!-- Dark hair/forehead region -->
+        <g clip-path="url(#face-clip)">
+          <!-- Dense waves in hair area -->
+          <path d="M 40 25 Q 70 22 100 24 Q 130 22 160 25
+                   M 38 32 Q 69 28 100 30 Q 131 28 162 32
+                   M 36 39 Q 68 34 100 36 Q 132 34 164 39
+                   M 35 46 Q 67 40 100 42 Q 133 40 165 46
+                   M 34 53 Q 67 47 100 49 Q 133 47 166 53"
+            fill="none" stroke="#111" stroke-width="1.2" stroke-linecap="round" opacity="0.9"/>
+          <!-- Medium density mid-face -->
+          <path d="M 34 62 Q 67 58 100 60 Q 133 58 166 62
+                   M 35 71 Q 68 67 100 69 Q 132 67 165 71
+                   M 37 80 Q 68 77 100 79 Q 132 77 163 80"
+            fill="none" stroke="#333" stroke-width="1.0" stroke-linecap="round" opacity="0.6"/>
+          <!-- Sparse in bright areas -->
+          <path d="M 40 89 Q 70 88 100 89 Q 130 88 160 89
+                   M 42 98 Q 71 97 100 98 Q 129 97 158 98
+                   M 43 107 Q 72 108 100 108 Q 128 108 157 107"
+            fill="none" stroke="#555" stroke-width="0.9" stroke-linecap="round" opacity="0.4"/>
+          <!-- Denser around eyes and mouth (shadow areas) -->
+          <path d="M 60 88 Q 84 85 100 87 Q 116 85 140 88
+                   M 58 96 Q 83 92 100 94 Q 117 92 142 96
+                   M 57 104 Q 82 99 100 101 Q 118 99 143 104"
+            fill="none" stroke="#222" stroke-width="1.1" stroke-linecap="round" opacity="0.8"/>
+          <!-- Lower face denser for chin/jaw shadow -->
+          <path d="M 45 116 Q 72 114 100 115 Q 128 114 155 116
+                   M 44 125 Q 71 122 100 123 Q 129 122 156 125
+                   M 44 134 Q 71 131 100 132 Q 129 131 156 134
+                   M 46 143 Q 72 140 100 141 Q 128 140 154 143
+                   M 50 152 Q 74 149 100 150 Q 126 149 150 152
+                   M 55 161 Q 76 158 100 159 Q 124 158 145 161
+                   M 62 170 Q 79 168 100 169 Q 121 168 138 170
+                   M 70 179 Q 83 178 100 178 Q 117 178 130 179"
+            fill="none" stroke="#333" stroke-width="1.0" stroke-linecap="round" opacity="0.5"/>
+        </g>
+        <!-- Face outline on top -->
+        <ellipse cx="100" cy="110" rx="68" ry="90" fill="none" stroke="#111" stroke-width="2"/>
+        <!-- Eyes suggested -->
+        <ellipse cx="80" cy="92" rx="10" ry="7" fill="none" stroke="#111" stroke-width="1.5"/>
+        <ellipse cx="120" cy="92" rx="10" ry="7" fill="none" stroke="#111" stroke-width="1.5"/>
+        <!-- Mouth -->
+        <path d="M 85 140 Q 100 150 115 140" fill="none" stroke="#111" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>C — TSP / Tonal</h3>
+      <p>One dense winding path builds up shading. Dark areas = dense loops, light areas = sparse. Photographic tonal feel.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px">Click a style to select it. You can also just reply in the terminal.</p>

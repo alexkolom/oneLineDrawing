@@ -1,0 +1,79 @@
+<h2>What aesthetic are you targeting?</h2>
+<p class="subtitle">Each style implies a different algorithmic strategy. Pick the one closest to your goal.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="silhouette" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;display:flex;align-items:center;justify-content:center;height:180px;padding:16px">
+      <svg viewBox="0 0 200 160" width="180" style="display:block">
+        <!-- Picasso-style minimal face silhouette -->
+        <path d="M100,20 C130,20 150,45 148,75 C146,105 135,120 120,130 C110,137 100,140 100,140 C100,140 90,137 80,130 C65,120 54,105 52,75 C50,45 70,20 100,20 Z" fill="none" stroke="#fff" stroke-width="2"/>
+        <path d="M100,140 C95,120 80,100 75,85 C72,75 74,68 80,65 C88,62 95,70 100,80 C105,70 112,62 120,65 C126,68 128,75 125,85 C120,100 105,120 100,140 Z" fill="none" stroke="#fff" stroke-width="2"/>
+        <ellipse cx="82" cy="68" rx="6" ry="4" fill="none" stroke="#fff" stroke-width="1.5"/>
+        <ellipse cx="118" cy="68" rx="6" ry="4" fill="none" stroke="#fff" stroke-width="1.5"/>
+        <path d="M88,95 Q100,105 112,95" fill="none" stroke="#fff" stroke-width="2"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>A — Minimal Silhouette</h3>
+      <p>One clean line traces the outer contour and a few key interior features. Picasso / minimalist portrait style. Very sparse — the subject is recognisable but abstracted.</p>
+      <p style="font-size:11px;color:#888;margin-top:8px">Algorithm focus: dominant silhouette extraction, depth-discontinuity edges, minimal interior detail</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="contour" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;display:flex;align-items:center;justify-content:center;height:180px;padding:16px">
+      <svg viewBox="0 0 200 160" width="180" style="display:block">
+        <!-- Multi-contour portrait style -->
+        <path d="M100,18 C128,18 148,38 150,65 C152,90 145,110 130,122 C118,132 108,138 100,140 C92,138 82,132 70,122 C55,110 48,90 50,65 C52,38 72,18 100,18 Z" fill="none" stroke="#fff" stroke-width="1.5"/>
+        <path d="M75,62 C78,55 86,52 92,55 C88,58 85,62 84,67" fill="none" stroke="#fff" stroke-width="1.5"/>
+        <path d="M125,62 C122,55 114,52 108,55 C112,58 115,62 116,67" fill="none" stroke="#fff" stroke-width="1.5"/>
+        <path d="M84,67 C86,72 88,74 92,73 C96,72 98,68 100,66 C102,68 104,72 108,73 C112,74 114,72 116,67" fill="none" stroke="#fff" stroke-width="1.5"/>
+        <path d="M88,95 C91,101 96,104 100,104 C104,104 109,101 112,95" fill="none" stroke="#fff" stroke-width="1.5"/>
+        <path d="M82,80 C85,78 90,77 100,77 C110,77 115,78 118,80" fill="none" stroke="#fff" stroke-width="1.5"/>
+        <path d="M70,55 C74,45 86,35 100,33 C114,35 126,45 130,55" fill="none" stroke="#fff" stroke-width="1.5"/>
+        <path d="M85,135 C88,145 92,150 100,152 C108,150 112,145 115,135" fill="none" stroke="#fff" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>B — Contour Drawing</h3>
+      <p>The line follows all major shape boundaries — outer edge plus interior features (eyes, nose, shadows). Like a skilled portrait sketch. More detailed, still clean.</p>
+      <p style="font-size:11px;color:#888;margin-top:8px">Algorithm focus: multi-level edge detection, skeleton graph traversal, smooth Euler path</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="tonal" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;display:flex;align-items:center;justify-content:center;height:180px;padding:16px">
+      <svg viewBox="0 0 200 160" width="180" style="display:block">
+        <!-- Tyler Foust style dense horizontal wave fills -->
+        <clipPath id="faceClip">
+          <ellipse cx="100" cy="80" rx="60" ry="72"/>
+        </clipPath>
+        <g clip-path="url(#faceClip)">
+          <!-- Dense horizontal waves — tight in dark areas, loose in light -->
+          <path d="M40,25 Q55,22 70,25 Q85,28 100,25 Q115,22 130,25 Q145,28 160,25" fill="none" stroke="#fff" stroke-width="1" opacity="0.6"/>
+          <path d="M40,32 Q52,29 65,33 Q78,37 90,33 Q102,29 115,33 Q128,37 140,33 Q152,29 160,32" fill="none" stroke="#fff" stroke-width="1" opacity="0.7"/>
+          <path d="M40,39 Q50,34 62,40 Q72,46 82,39 Q92,32 100,39 Q108,46 118,40 Q128,34 138,40 Q148,46 160,39" fill="none" stroke="#fff" stroke-width="1.2" opacity="0.8"/>
+          <path d="M40,48 Q48,40 58,48 Q66,55 76,47 Q84,39 93,48 Q102,57 111,47 Q120,37 128,47 Q136,57 148,48 Q156,39 160,48" fill="none" stroke="#fff" stroke-width="1.3"/>
+          <path d="M40,58 Q47,48 57,59 Q63,67 73,58 Q80,48 90,59 Q96,67 107,57 Q115,47 124,58 Q130,67 142,58 Q150,48 160,58" fill="none" stroke="#fff" stroke-width="1.4"/>
+          <path d="M40,68 Q46,56 55,68 Q61,77 70,67 Q77,56 87,68 Q93,78 103,67 Q111,56 120,67 Q127,78 137,67 Q145,56 155,68 Q158,74 160,68" fill="none" stroke="#fff" stroke-width="1.5"/>
+          <path d="M40,79 Q45,65 54,79 Q59,88 68,77 Q74,65 84,79 Q90,88 101,77 Q109,65 118,77 Q125,88 135,77 Q143,65 153,77 Q157,83 160,78" fill="none" stroke="#fff" stroke-width="1.5"/>
+          <path d="M40,90 Q45,76 53,90 Q58,98 67,87 Q73,75 83,87 Q89,98 99,87 Q107,75 117,87 Q123,98 133,87 Q140,75 151,87 Q156,94 160,88" fill="none" stroke="#fff" stroke-width="1.4"/>
+          <path d="M40,100 Q44,89 52,100 Q57,108 65,98 Q71,88 81,98 Q88,108 98,98 Q105,88 115,98 Q122,108 132,97 Q139,87 150,97 Q155,103 160,99" fill="none" stroke="#fff" stroke-width="1.3"/>
+          <path d="M40,110 Q44,101 51,110 Q56,117 64,108 Q69,99 79,108 Q86,117 96,108 Q103,99 113,108 Q119,117 129,108 Q136,99 147,107 Q153,112 160,109" fill="none" stroke="#fff" stroke-width="1.2"/>
+          <path d="M40,120 Q44,113 51,120 Q55,126 62,118 Q67,110 77,118 Q84,126 94,118 Q100,110 111,118 Q117,126 127,118 Q133,110 144,117 Q150,122 160,119" fill="none" stroke="#fff" stroke-width="1"/>
+          <path d="M40,130 Q44,124 50,130 Q54,135 61,128 Q65,121 75,128 Q82,135 92,128 Q98,121 109,128 Q115,135 125,128 Q131,121 142,128 Q147,133 160,130" fill="none" stroke="#fff" stroke-width="0.9" opacity="0.8"/>
+        </g>
+        <ellipse cx="100" cy="80" rx="60" ry="72" fill="none" stroke="#fff" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>C — Tonal / Zigzag Fill</h3>
+      <p>The line sweeps back and forth (Tyler Foust style). Dark areas = tight loops, light areas = wide loops. Shading is encoded in density. Very recognisable from distance.</p>
+      <p style="font-size:11px;color:#888;margin-top:8px">Algorithm focus: scanline path generation, brightness-driven amplitude/frequency modulation</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px">You can also describe a mix or a different aesthetic in the terminal.</p>

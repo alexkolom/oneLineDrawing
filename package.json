@@ -1,0 +1,9 @@
+{
+  "name": "singleline",
+  "version": "1.0.0",
+  "description": "Image to single continuous curve pipeline",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
