@@ -589,12 +589,37 @@ function createStepCards() {
       }
 
       if (step.isSVG) {
-        const btn = document.createElement('button');
-        btn.className = 'btn-export';
-        btn.textContent = 'Export SVG';
-        btn.disabled = true;
-        btn.addEventListener('click', exportSVG);
-        ctrl.appendChild(btn);
+        const exportBtn = document.createElement('button');
+        exportBtn.className = 'btn-export';
+        exportBtn.textContent = 'Export SVG';
+        exportBtn.disabled = true;
+        exportBtn.addEventListener('click', exportSVG);
+        ctrl.appendChild(exportBtn);
+
+        // Multi-path layer controls (hidden until toggle is on)
+        const mpDiv = document.createElement('div');
+        mpDiv.id = 'multipath-controls';
+        mpDiv.style.cssText = 'display:none; flex-wrap:wrap; gap:22px; width:100%; margin-top:4px';
+
+        ['FINE', 'MEDIUM', 'COARSE'].forEach((label, idx) => {
+          const defaults = ['#bbbbbb', '#777777', '#222222'];
+          const wrap = document.createElement('div');
+          wrap.className = 'ctrl';
+          wrap.innerHTML = `
+            <div class="ctrl-label">${label}</div>
+            <div class="ctrl-row">
+              <span id="mp-t${idx}" style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:40px">—</span>
+              <input type="color" id="mp-color-${idx}" value="${defaults[idx]}"
+                style="width:32px;height:24px;cursor:pointer;border:1px solid var(--border);border-radius:4px;padding:1px;background:none">
+            </div>`;
+          wrap.querySelector(`#mp-color-${idx}`).addEventListener('input', e => {
+            layerColors[idx] = e.target.value;
+            if (S.leveled && multiPath) runFrom(8);
+          });
+          mpDiv.appendChild(wrap);
+        });
+
+        ctrl.appendChild(mpDiv);
       }
 
       card.appendChild(ctrl);
