@@ -35,6 +35,8 @@ const P = {
   strokeWidth:     1.0,
 };
 const P_DEFAULTS = { ...P };
+let multiPath = false;
+const layerColors = ['#bbbbbb', '#777777', '#222222']; // [fine, medium, coarse]
 const P_STORAGE_KEY = 'singleline_params_v4';
 
 function saveParams() {
@@ -273,9 +275,21 @@ const STEPS = [
       { key: 'strokeWidth', label: 'Stroke Width', min: 0.5, max: 4, step: 0.5, firstAffected: 8 },
     ],
     run() {
-      if (!S.smoothed?.length) { S.svgString = ''; return; }
-      const d = BezierPathBuilder.build(S.smoothed, 0.5);
-      S.svgString = makeSVG([{ d, color: 'black' }], W, H, P.strokeWidth);
+      if (!S.leveled) { S.svgString = ''; return; }
+      if (multiPath) {
+        const [t1, t2] = Thresholder.otsu3(S.leveled);
+        const thresholds = [t1, Math.round((t1 + t2) / 2), t2]; // fine, medium, coarse
+        const layers = thresholds.map((t, i) => ({ d: runLayer(S.leveled, t), color: layerColors[i] }));
+        S.svgString = makeSVG(layers, W, H, P.strokeWidth);
+        thresholds.forEach((t, i) => {
+          const el = document.getElementById(`mp-t${i}`);
+          if (el) el.textContent = `t=${t}`;
+        });
+      } else {
+        if (!S.smoothed?.length) { S.svgString = ''; return; }
+        const d = BezierPathBuilder.build(S.smoothed, 0.5);
+        S.svgString = makeSVG([{ d, color: 'black' }], W, H, P.strokeWidth);
+      }
     },
     draw() {},
     stat() { return S.svgString ? `${(S.svgString.length / 1024).toFixed(1)} KB` : '—'; },
@@ -327,6 +341,17 @@ function makeSVG(layers, w, h, sw) {
 <rect width="${w}" height="${h}" fill="white"/>
 ${paths}
 </svg>`;
+}
+
+function runLayer(leveled, threshold) {
+  const binary   = Thresholder.apply(leveled, threshold);
+  const raw      = ContourTracer.trace(binary, W, H);
+  const minArea  = P.minContourFrac * W * H;
+  const filtered = ContourSimplifier.filter(raw, minArea);
+  const contours = ContourSimplifier.simplify(filtered, P.simplification);
+  const euler    = PathPlanner.solve(contours, { maxJumpFrac: P.maxJumpFrac, width: W, height: H });
+  const smoothed = BezierPathBuilder.smooth(euler, 4);
+  return BezierPathBuilder.build(smoothed, 0.5);
 }
 
 // ── Run control ────────────────────────────────────────────────────────
