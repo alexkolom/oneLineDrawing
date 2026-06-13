@@ -1,6 +1,7 @@
 import { EdgeDetector }      from './EdgeDetector.js';
-import { Skeletonizer }      from './Skeletonizer.js';
-import { SkeletonGraph }     from './SkeletonGraph.js';
+import { Thresholder }       from './Thresholder.js';
+import { ContourTracer }     from './ContourTracer.js';
+import { ContourSimplifier } from './ContourSimplifier.js';
 import { PathPlanner }       from './PathPlanner.js';
 import { BezierPathBuilder } from './BezierPathBuilder.js';
 
@@ -10,37 +11,31 @@ const MAX_SIZE = 600;
 // ── Pipeline state ─────────────────────────────────────────────────────
 let W = 0, H = 0;
 const S = {
-  srcCanvas:  null,
-  imageData:  null,
-  gray:       null,
-  leveled:    null,
-  canny:      null,
-  skeleton:   null,
-  graph:      null,
-  eulerPath:  null,
-  smoothed:   null,
-  svgString:  null,
+  srcCanvas:   null,
+  imageData:   null,
+  gray:        null,
+  leveled:     null,
+  binary:      null,
+  rawContours: null,
+  contours:    null,
+  eulerPath:   null,
+  smoothed:    null,
+  svgString:   null,
 };
 
 // ── User params (all spatial params are fractions of diagonal d=√(W²+H²)) ──
 const P = {
-  blackPoint:       0,
-  whitePoint:       255,
-  gamma:            1.0,
-  detailLevel:      0.75,
-  blurSigmaFrac:    0.006,
-  cannyHighFrac:    0.15,
-  cannyLowFrac:     0.05,
-  closeFrac:        0.003,
-  minBranchFrac:    0.020,
-  silhouetteBonus:  2.0,
-  maxJumpFrac:      0.08,
-  splineTension:    0.5,
-  sampleFrac:       0.015,
-  strokeWidth:      1.0,
+  blackPoint:      0,
+  whitePoint:      255,
+  gamma:           1.0,
+  threshold:       128,
+  minContourFrac:  0.0005,
+  simplification:  1.5,
+  maxJumpFrac:     0.08,
+  strokeWidth:     1.0,
 };
 const P_DEFAULTS = { ...P };
-const P_STORAGE_KEY = 'singleline_params';
+const P_STORAGE_KEY = 'singleline_params_v2';
 
 function saveParams() {
   localStorage.setItem(P_STORAGE_KEY, JSON.stringify(P));
@@ -132,103 +127,88 @@ const STEPS = [
     stat() { return S.leveled ? `bp ${P.blackPoint}  wp ${P.whitePoint}  γ ${P.gamma.toFixed(2)}` : '—'; },
   },
   {
-    num: '04', name: 'CANNY EDGES',
-    desc: 'Gaussian blur → Sobel → non-max suppression → hysteresis — finds real gradient edges',
+    num: '04', name: 'THRESHOLD',
+    desc: 'Otsu binarisation — dark pixels become foreground regions for contour tracing',
     controls: [
-      { key: 'detailLevel',   label: 'Detail',    min: 0,    max: 1,    step: 0.05,  firstAffected: 3,
-        derive(v) {
-          const lerp = (a, b, t) => a + (b - a) * t;
-          setParam('blurSigmaFrac', parseFloat(lerp(0.015, 0.003, v).toFixed(3)));
-          setParam('cannyHighFrac', parseFloat(lerp(0.35,  0.08,  v).toFixed(2)));
-          setParam('cannyLowFrac',  parseFloat((lerp(0.35, 0.08,  v) * 0.35).toFixed(2)));
-          setParam('minBranchFrac', parseFloat(lerp(0.04,  0.01,  v).toFixed(3)));
-        },
-      },
-      { key: 'blurSigmaFrac', label: 'Blur σ',   min: 0,    max: 0.02, step: 0.001, firstAffected: 3 },
-      { key: 'cannyHighFrac', label: 'High Thr',  min: 0.05, max: 0.5,  step: 0.01,  firstAffected: 3 },
-      { key: 'cannyLowFrac',  label: 'Low Thr',   min: 0.01, max: 0.2,  step: 0.01,  firstAffected: 3 },
+      { key: 'threshold', label: 'Threshold', min: 0, max: 255, step: 1, firstAffected: 3 },
     ],
     auto() {
       if (!S.leveled) return;
-      const { highFrac, lowFrac } = EdgeDetector.autoCannyFracs(S.leveled, W, H);
-      setParam('cannyHighFrac', parseFloat(highFrac.toFixed(2)));
-      setParam('cannyLowFrac',  parseFloat(lowFrac.toFixed(2)));
+      setParam('threshold', Thresholder.otsu(S.leveled));
       scheduleRun(3);
     },
     run() {
-      if (!S.leveled) return;
-      const sigma  = P.blurSigmaFrac * diag();
-      const blurred = EdgeDetector.gaussianBlur(S.leveled, W, H, sigma);
-      const nms     = EdgeDetector.nonMaxSuppression(blurred, W, H);
-      S.canny       = EdgeDetector.hysteresis(nms, W, H, P.cannyLowFrac, P.cannyHighFrac);
+      S.binary = S.leveled ? Thresholder.apply(S.leveled, P.threshold) : null;
     },
     draw(canvas) {
-      if (!S.canny) return;
-      putImageData(canvas, EdgeDetector.toImageData(S.canny, W, H));
+      if (!S.binary) return;
+      putImageData(canvas, EdgeDetector.toImageData(S.binary, W, H));
     },
     stat() {
-      if (!S.canny) return '—';
-      let n = 0; for (const v of S.canny) if (v) n++;
-      const pxEq = (P.blurSigmaFrac * diag()).toFixed(1);
-      return `${n.toLocaleString()} edge px · σ≈${pxEq}px`;
+      if (!S.binary) return '—';
+      let n = 0; for (const v of S.binary) if (v) n++;
+      return `${n.toLocaleString()} fg px · t=${P.threshold}`;
     },
   },
   {
-    num: '05', name: 'SKELETON',
-    desc: 'morphological closing → Zhang-Suen thinning — fills gaps then reduces to 1-pixel centerlines',
-    controls: [
-      { key: 'closeFrac', label: 'Close Radius', min: 0, max: 0.01, step: 0.001, firstAffected: 4 },
-    ],
+    num: '05', name: 'CONTOUR TRACE',
+    desc: 'border-following on binary image — one ordered polygon per region boundary',
+    controls: [],
     run() {
-      if (!S.canny) { S.skeleton = null; return; }
-      const closed = EdgeDetector.morphClose(S.canny, W, H, P.closeFrac * diag());
-      S.skeleton = Skeletonizer.thin(closed, W, H);
+      S.rawContours = S.binary ? ContourTracer.trace(S.binary, W, H) : [];
     },
     draw(canvas) {
-      if (!S.skeleton) return;
-      putImageData(canvas, EdgeDetector.toImageData(S.skeleton, W, H));
-    },
-    stat() {
-      if (!S.skeleton || !S.canny) return '—';
-      const before = [...S.canny].filter(Boolean).length;
-      const after  = [...S.skeleton].filter(Boolean).length;
-      const pct    = before ? Math.round((1 - after / before) * 100) : 0;
-      return `${after.toLocaleString()} px (↓${pct}% from ${before.toLocaleString()})`;
-    },
-  },
-  {
-    num: '06', name: 'JUNCTION GRAPH',
-    desc: 'classify junctions & endpoints, trace branches, prune short ones, weight silhouette edges',
-    controls: [
-      { key: 'minBranchFrac',   label: 'Min Branch',      min: 0.005, max: 0.05,  step: 0.005, firstAffected: 5 },
-      { key: 'silhouetteBonus', label: 'Silhouette Bonus', min: 0,     max: 5,     step: 0.5,   firstAffected: 5 },
-    ],
-    run() {
-      if (!S.skeleton || !S.leveled) { S.graph = null; return; }
-      S.graph = SkeletonGraph.build(S.skeleton, W, H, S.leveled,
-        { minBranchFrac: P.minBranchFrac, silhouetteBonus: P.silhouetteBonus });
-    },
-    draw(canvas) {
-      if (!S.graph) return;
+      if (!S.rawContours?.length) return;
       canvas.width = W; canvas.height = H;
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
       ctx.lineWidth = 1; ctx.lineCap = 'round';
-      S.graph.edges.forEach((e, i) => {
-        ctx.strokeStyle = e.isSilhouette
-          ? '#ff9944'
-          : `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
+      S.rawContours.forEach((c, i) => {
+        ctx.strokeStyle = `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
         ctx.beginPath();
-        ctx.moveTo(e.pixels[0].x, e.pixels[0].y);
-        for (let j = 1; j < e.pixels.length; j++) ctx.lineTo(e.pixels[j].x, e.pixels[j].y);
+        ctx.moveTo(c[0].x, c[0].y);
+        for (let j = 1; j < c.length; j++) ctx.lineTo(c[j].x, c[j].y);
+        ctx.closePath();
         ctx.stroke();
       });
     },
     stat() {
-      if (!S.graph) return '—';
-      const sil = S.graph.edges.filter(e => e.isSilhouette).length;
-      const pxEq = (P.minBranchFrac * diag()).toFixed(0);
-      return `${S.graph.nodes.length} nodes · ${S.graph.edges.length} edges · ${sil} silhouette · min≈${pxEq}px`;
+      if (!S.rawContours) return '—';
+      const pts = S.rawContours.reduce((s, c) => s + c.length, 0);
+      return `${S.rawContours.length} contours · ${pts.toLocaleString()} pts`;
+    },
+  },
+  {
+    num: '06', name: 'FILTER + SIMPLIFY',
+    desc: 'drop small contours · Ramer-Douglas-Peucker — reduces to clean sparse polylines',
+    controls: [
+      { key: 'minContourFrac', label: 'Min Area',   min: 0, max: 0.005, step: 0.0001, firstAffected: 5 },
+      { key: 'simplification', label: 'Simplify ε', min: 0.5, max: 15,  step: 0.5,   firstAffected: 5 },
+    ],
+    run() {
+      if (!S.rawContours?.length) { S.contours = []; return; }
+      const minArea = P.minContourFrac * W * H;
+      const filtered = ContourSimplifier.filter(S.rawContours, minArea);
+      S.contours = ContourSimplifier.simplify(filtered, P.simplification);
+    },
+    draw(canvas) {
+      if (!S.contours?.length) return;
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.lineWidth = 1; ctx.lineCap = 'round';
+      S.contours.forEach((c, i) => {
+        ctx.strokeStyle = `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
+        ctx.beginPath();
+        ctx.moveTo(c[0].x, c[0].y);
+        for (let j = 1; j < c.length; j++) ctx.lineTo(c[j].x, c[j].y);
+        ctx.stroke();
+      });
+    },
+    stat() {
+      if (!S.contours) return '—';
+      const pts = S.contours.reduce((s, c) => s + c.length, 0);
+      return `${S.contours.length} contours · ${pts.toLocaleString()} pts`;
     },
   },
   {
@@ -238,8 +218,8 @@ const STEPS = [
       { key: 'maxJumpFrac', label: 'Max Jump', min: 0.01, max: 0.3, step: 0.01, firstAffected: 6 },
     ],
     run() {
-      if (!S.graph) { S.eulerPath = []; return; }
-      S.eulerPath = PathPlanner.solve(S.graph, { maxJumpFrac: P.maxJumpFrac, width: W, height: H });
+      if (!S.contours?.length) { S.eulerPath = []; return; }
+      S.eulerPath = PathPlanner.solve(S.contours, { maxJumpFrac: P.maxJumpFrac, width: W, height: H });
     },
     draw(canvas) {
       if (!S.eulerPath) return;
@@ -259,15 +239,10 @@ const STEPS = [
   {
     num: '08', name: 'SMOOTH SPLINE',
     desc: 'arc-length subsampling + Catmull-Rom spline — smooth curve through skeleton path',
-    controls: [
-      { key: 'splineTension', label: 'Tension',     min: 0,     max: 1,    step: 0.05,  firstAffected: 8 },
-      { key: 'sampleFrac',   label: 'Sample Rate', min: 0.002, max: 0.02, step: 0.001, firstAffected: 7 },
-    ],
+    controls: [],
     run() {
       if (!S.eulerPath?.length) { S.smoothed = []; return; }
-      const step = P.sampleFrac * diag();
-      const resampled = BezierPathBuilder.resample(S.eulerPath, step);
-      S.smoothed = BezierPathBuilder.smooth(resampled, 4);
+      S.smoothed = BezierPathBuilder.smooth(S.eulerPath, 4);
     },
     draw(canvas) {
       if (!S.smoothed) return;
@@ -286,9 +261,8 @@ const STEPS = [
     },
     stat() {
       if (!S.smoothed) return '—';
-      const pts  = S.smoothed.filter(p => p !== null).length;
-      const pxEq = (P.sampleFrac * diag()).toFixed(1);
-      return `${pts.toLocaleString()} pts · step≈${pxEq}px`;
+      const pts = S.smoothed.filter(p => p !== null).length;
+      return `${pts.toLocaleString()} pts`;
     },
   },
   {
@@ -300,7 +274,7 @@ const STEPS = [
     ],
     run() {
       if (!S.smoothed?.length) { S.svgString = ''; return; }
-      const d = BezierPathBuilder.build(S.smoothed, P.splineTension);
+      const d = BezierPathBuilder.build(S.smoothed, 0.5);
       S.svgString = makeSVG(d, W, H, P.strokeWidth);
     },
     draw() {},
@@ -431,6 +405,11 @@ async function loadFile(file) {
 
   S.srcCanvas = offscreen;
   S.imageData = ctx.getImageData(0, 0, W, H);
+
+  // Auto-detect threshold for the new image before running pipeline
+  const gray = EdgeDetector.toGrayscale(S.imageData);
+  const leveled = EdgeDetector.levels(gray, P.blackPoint, P.whitePoint, P.gamma);
+  setParam('threshold', Thresholder.otsu(leveled));
 
   showPipeline();
   await runFrom(0);
@@ -639,6 +618,20 @@ function init() {
   dz.addEventListener('click', () => fileInput.click());
 
   document.getElementById('btnReset').addEventListener('click', resetParams);
+
+  const btnAutoAll = document.getElementById('btnAutoAll');
+  if (btnAutoAll) {
+    btnAutoAll.addEventListener('click', () => {
+      if (!S.leveled) return;
+      const { blackPoint, whitePoint } = EdgeDetector.analyzeHistogram(S.gray);
+      setParam('blackPoint', blackPoint);
+      setParam('whitePoint', whitePoint);
+      setParam('threshold', Thresholder.otsu(S.leveled));
+      setParam('minContourFrac', 0.0005);
+      setParam('simplification', 1.5);
+      runFrom(0);
+    });
+  }
 }
 
 init();
