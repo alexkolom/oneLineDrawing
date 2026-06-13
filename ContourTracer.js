@@ -54,10 +54,10 @@ export class ContourTracer {
     }
 
     // Build lookup set and sort to find topmost-leftmost start
-    const inSet = new Uint8Set(pixels);
+    const inSet = new Set(pixels);
     pixels.sort((a, b) => ((a / width) | 0) - ((b / width) | 0) || a % width - b % width);
 
-    const visited = new Uint8Set([]);
+    const visited = new Set();
     const chain = [];
     let cur = pixels[0];
 
@@ -74,15 +74,4 @@ export class ContourTracer {
     }
     return chain;
   }
-}
-
-// Minimal integer set backed by Uint8Array for performance
-class Uint8Set {
-  #data;
-  constructor(items) {
-    this.#data = new Map();
-    for (const v of items) this.#data.set(v, 1);
-  }
-  has(v) { return this.#data.has(v); }
-  add(v) { this.#data.set(v, 1); }
 }
