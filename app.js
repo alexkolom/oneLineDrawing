@@ -26,16 +26,16 @@ const S = {
 // ── User params (all spatial params are fractions of diagonal d=√(W²+H²)) ──
 const P = {
   blackPoint:      0,
-  whitePoint:      255,
+  whitePoint:      240,
   gamma:           1.0,
-  threshold:       128,
-  minContourFrac:  0.0005,
-  simplification:  1.5,
-  maxJumpFrac:     0.08,
+  threshold:       225,
+  minContourFrac:  0.002,
+  simplification:  4.5,
+  maxJumpFrac:     0.05,
   strokeWidth:     1.0,
 };
 const P_DEFAULTS = { ...P };
-const P_STORAGE_KEY = 'singleline_params_v2';
+const P_STORAGE_KEY = 'singleline_params_v3';
 
 function saveParams() {
   localStorage.setItem(P_STORAGE_KEY, JSON.stringify(P));
