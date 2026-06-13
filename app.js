@@ -660,6 +660,19 @@ function init() {
       runFrom(0);
     });
   }
+
+  const btnMultiPath = document.getElementById('btnMultiPath');
+  if (btnMultiPath) {
+    btnMultiPath.addEventListener('click', () => {
+      multiPath = !multiPath;
+      btnMultiPath.textContent = `Multi-path: ${multiPath ? 'ON' : 'OFF'}`;
+      btnMultiPath.style.color       = multiPath ? 'var(--accent)' : '';
+      btnMultiPath.style.borderColor = multiPath ? 'var(--accent)' : '';
+      const mpControls = document.getElementById('multipath-controls');
+      if (mpControls) mpControls.style.display = multiPath ? 'flex' : 'none';
+      if (S.leveled) runFrom(8);
+    });
+  }
 }
 
 init();
