@@ -29,8 +29,9 @@ const P = {
   whitePoint:      200,
   gamma:           0.8,
   threshold:       128,
-  minContourFrac:  0.001,
-  simplification:  2.5,
+  minContourFrac:   0.001,
+  minArcLengthFrac: 0.03,
+  simplification:   2.5,
   maxJumpFrac:     0.06,
   strokeWidth:     1.0,
 };
@@ -184,14 +185,17 @@ const STEPS = [
     num: '06', name: 'FILTER + SIMPLIFY',
     desc: 'drop small contours · Ramer-Douglas-Peucker — reduces to clean sparse polylines',
     controls: [
-      { key: 'minContourFrac', label: 'Min Area',   min: 0, max: 0.005, step: 0.0001, firstAffected: 5 },
-      { key: 'simplification', label: 'Simplify ε', min: 0.5, max: 15,  step: 0.5,   firstAffected: 5 },
+      { key: 'minContourFrac',   label: 'Min Area',   min: 0,   max: 0.005, step: 0.0001, firstAffected: 5 },
+      { key: 'minArcLengthFrac', label: 'Min Arc',    min: 0,   max: 0.15,  step: 0.005,  firstAffected: 5 },
+      { key: 'simplification',   label: 'Simplify ε', min: 0.5, max: 15,    step: 0.5,    firstAffected: 5 },
     ],
     run() {
       if (!S.rawContours?.length) { S.contours = []; return; }
-      const minArea = P.minContourFrac * W * H;
-      const filtered = ContourSimplifier.filter(S.rawContours, minArea);
-      S.contours = ContourSimplifier.simplify(filtered, P.simplification);
+      const minArea      = P.minContourFrac * W * H;
+      const minArcLength = P.minArcLengthFrac * diag();
+      const filtered     = ContourSimplifier.filter(S.rawContours, minArea, minArcLength);
+      const simplified   = ContourSimplifier.simplify(filtered, P.simplification);
+      S.contours         = ContourSimplifier.sortByLength(simplified);
     },
     draw(canvas) {
       if (!S.contours?.length) return;
