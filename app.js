@@ -39,6 +39,7 @@ const P_DEFAULTS = { ...P };
 let multiPath = false;
 const layerColors = ['#bbbbbb', '#777777', '#222222']; // [fine, medium, coarse]
 let layerThresholds = [85, 127, 170];                  // [fine, medium, coarse] — overwritten by Otsu3 on toggle-ON
+let mpSliderDebounce = null;
 const P_STORAGE_KEY = 'singleline_params_v4';
 
 function saveParams() {
@@ -623,7 +624,8 @@ function createStepCards() {
               const thr = document.querySelector('#step-3 input[type=range]');
               if (thr) thr.value = v;
             }
-            if (S.leveled && multiPath) runFrom(8);
+            clearTimeout(mpSliderDebounce);
+            mpSliderDebounce = setTimeout(() => { if (S.leveled && multiPath) runFrom(8); }, 250);
           });
           wrap.querySelector(`#mp-color-${idx}`).addEventListener('input', e => {
             layerColors[idx] = e.target.value;
