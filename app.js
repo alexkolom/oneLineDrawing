@@ -33,6 +33,8 @@ const P = {
   minArcLengthFrac: 0.03,
   simplification:   2.5,
   maxJumpFrac:     0.06,
+  smoothIter:      1,
+  tension:         0.5,
   strokeWidth:     1.0,
 };
 const P_DEFAULTS = { ...P };
@@ -247,10 +249,13 @@ const STEPS = [
   {
     num: '08', name: 'SMOOTH SPLINE',
     desc: 'arc-length subsampling + Catmull-Rom spline — smooth curve through skeleton path',
-    controls: [],
+    controls: [
+      { key: 'smoothIter', label: 'Smooth Iter', min: 0, max: 8, step: 1,   firstAffected: 7 },
+      { key: 'tension',    label: 'Tension',     min: 0, max: 1, step: 0.05, firstAffected: 7 },
+    ],
     run() {
       if (!S.eulerPath?.length) { S.smoothed = []; return; }
-      S.smoothed = BezierPathBuilder.smooth(S.eulerPath, 4);
+      S.smoothed = BezierPathBuilder.smooth(S.eulerPath, P.smoothIter);
     },
     draw(canvas) {
       if (!S.smoothed) return;
@@ -287,7 +292,7 @@ const STEPS = [
         S.svgString = makeSVG(layers, W, H, P.strokeWidth);
       } else {
         if (!S.smoothed?.length) { S.svgString = ''; return; }
-        const d = BezierPathBuilder.build(S.smoothed, 0.5);
+        const d = BezierPathBuilder.build(S.smoothed, P.tension);
         S.svgString = makeSVG([{ d, color: 'black' }], W, H, P.strokeWidth);
       }
     },
@@ -350,8 +355,8 @@ function runLayer(leveled, threshold) {
   const filtered = ContourSimplifier.filter(raw, minArea);
   const contours = ContourSimplifier.simplify(filtered, P.simplification);
   const euler    = PathPlanner.solve(contours, { maxJumpFrac: P.maxJumpFrac, width: W, height: H });
-  const smoothed = BezierPathBuilder.smooth(euler, 4);
-  return BezierPathBuilder.build(smoothed, 0.5);
+  const smoothed = BezierPathBuilder.smooth(euler, P.smoothIter);
+  return BezierPathBuilder.build(smoothed, P.tension);
 }
 
 // ── Run control ────────────────────────────────────────────────────────
