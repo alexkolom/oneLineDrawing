@@ -38,6 +38,7 @@ const P = {
 const P_DEFAULTS = { ...P };
 let multiPath = false;
 const layerColors = ['#bbbbbb', '#777777', '#222222']; // [fine, medium, coarse]
+let layerThresholds = [85, 127, 170];                  // [fine, medium, coarse] — overwritten by Otsu3 on toggle-ON
 const P_STORAGE_KEY = 'singleline_params_v4';
 
 function saveParams() {
@@ -281,14 +282,8 @@ const STEPS = [
     run() {
       if (!S.leveled) { S.svgString = ''; return; }
       if (multiPath) {
-        const [t1, t2] = Thresholder.otsu3(S.leveled);
-        const thresholds = [t1, Math.round((t1 + t2) / 2), t2]; // fine, medium, coarse
-        const layers = thresholds.map((t, i) => ({ d: runLayer(S.leveled, t), color: layerColors[i] }));
+        const layers = layerThresholds.map((t, i) => ({ d: runLayer(S.leveled, t), color: layerColors[i] }));
         S.svgString = makeSVG(layers, W, H, P.strokeWidth);
-        thresholds.forEach((t, i) => {
-          const el = document.getElementById(`mp-t${i}`);
-          if (el) el.textContent = `t=${t}`;
-        });
       } else {
         if (!S.smoothed?.length) { S.svgString = ''; return; }
         const d = BezierPathBuilder.build(S.smoothed, 0.5);
