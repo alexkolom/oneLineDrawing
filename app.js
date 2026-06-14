@@ -607,10 +607,24 @@ function createStepCards() {
           wrap.innerHTML = `
             <div class="ctrl-label">${label}</div>
             <div class="ctrl-row">
-              <span id="mp-t${idx}" style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:40px">—</span>
+              <input type="range" id="mp-slider-${idx}" min="0" max="255" step="1" value="${layerThresholds[idx]}"
+                style="width:80px">
+              <span id="mp-t${idx}" style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:32px">${layerThresholds[idx]}</span>
               <input type="color" id="mp-color-${idx}" value="${defaults[idx]}"
                 style="width:32px;height:24px;cursor:pointer;border:1px solid var(--border);border-radius:4px;padding:1px;background:none">
             </div>`;
+          wrap.querySelector(`#mp-slider-${idx}`).addEventListener('input', e => {
+            const v = Number(e.target.value);
+            layerThresholds[idx] = v;
+            const rd = document.getElementById(`mp-t${idx}`);
+            if (rd) rd.textContent = v;
+            if (idx === 1) {
+              P.threshold = v;
+              const thr = document.querySelector('#step-3 input[type=range]');
+              if (thr) thr.value = v;
+            }
+            if (S.leveled && multiPath) runFrom(8);
+          });
           wrap.querySelector(`#mp-color-${idx}`).addEventListener('input', e => {
             layerColors[idx] = e.target.value;
             if (S.leveled && multiPath) runFrom(8);
