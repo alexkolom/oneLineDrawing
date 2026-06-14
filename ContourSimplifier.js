@@ -1,6 +1,7 @@
 export class ContourSimplifier {
-  // Keep only contours whose bounding-box area >= minArea (px²).
-  static filter(contours, minArea) {
+  // Keep only contours whose bounding-box area >= minArea (px²)
+  // and whose arc-length >= minArcLength (px). minArcLength=0 skips the check.
+  static filter(contours, minArea, minArcLength = 0) {
     return contours.filter(c => {
       if (c.length < 3) return false;
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -8,8 +9,25 @@ export class ContourSimplifier {
         if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
         if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
       }
-      return (maxX - minX) * (maxY - minY) >= minArea;
+      if ((maxX - minX) * (maxY - minY) < minArea) return false;
+      if (minArcLength > 0 && this.arcLength(c) < minArcLength) return false;
+      return true;
     });
+  }
+
+  // Sum of Euclidean distances between consecutive points.
+  static arcLength(contour) {
+    let len = 0;
+    for (let i = 1; i < contour.length; i++) {
+      len += Math.hypot(contour[i].x - contour[i - 1].x, contour[i].y - contour[i - 1].y);
+    }
+    return len;
+  }
+
+  // Sort contours by arc-length descending (longest = most structural first).
+  // Returns a new array; does not mutate input.
+  static sortByLength(contours) {
+    return [...contours].sort((a, b) => this.arcLength(b) - this.arcLength(a));
   }
 
   // Ramer-Douglas-Peucker: reduce points while preserving shape.
