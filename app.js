@@ -694,6 +694,16 @@ function init() {
       btnMultiPath.style.borderColor = multiPath ? 'var(--accent)' : '';
       const mpControls = document.getElementById('multipath-controls');
       if (mpControls) mpControls.style.display = multiPath ? 'flex' : 'none';
+      if (multiPath && S.leveled) {
+        const [t1, t2] = Thresholder.otsu3(S.leveled);
+        layerThresholds = [t1, Math.round((t1 + t2) / 2), t2];
+        layerThresholds.forEach((t, i) => {
+          const sl = document.getElementById(`mp-slider-${i}`);
+          if (sl) sl.value = t;
+          const rd = document.getElementById(`mp-t${i}`);
+          if (rd) rd.textContent = t;
+        });
+      }
       if (S.leveled) runFrom(8);
     });
   }
