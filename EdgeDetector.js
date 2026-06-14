@@ -4,11 +4,16 @@ export class EdgeDetector {
     const { data, width, height } = imageData;
     const gray = new Uint8Array(width * height);
     for (let i = 0; i < width * height; i++) {
-      gray[i] = Math.round(
-        0.299 * data[i * 4] +
-        0.587 * data[i * 4 + 1] +
-        0.114 * data[i * 4 + 2]
-      );
+      const a = data[i * 4 + 3];
+      if (a < 128) {
+        gray[i] = 255; // transparent → white background
+      } else {
+        const t = a / 255;
+        gray[i] = Math.round(
+          (0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]) * t +
+          255 * (1 - t)
+        );
+      }
     }
     return gray;
   }
