@@ -4,6 +4,7 @@ import { ContourTracer }     from './ContourTracer.js';
 import { ContourSimplifier } from './ContourSimplifier.js';
 import { PathPlanner }       from './PathPlanner.js';
 import { BezierPathBuilder } from './BezierPathBuilder.js';
+import { StrokeExtractor }   from './StrokeExtractor.js';
 
 // ── Constants ──────────────────────────────────────────────────────────
 const MAX_SIZE = 600;
@@ -417,6 +418,28 @@ const STROKE_STEPS = [
     },
     stat() { return SS.candidates ? `${SS.candidates.length} candidates` : '—'; },
   },
+  {
+    num: '04', name: 'RANKED SELECTION',
+    desc: 'primary + top complementary features (diversity-suppressed)',
+    controls: [
+      { key: 'strokeCount',       label: 'Strokes',     min: 1, max: 3, step: 1,    firstAffected: 3 },
+      { key: 'strokeAbstraction', label: 'Abstraction', min: 0, max: 1, step: 0.05, firstAffected: 4 },
+    ],
+    run() {
+      SS.selected = [];
+      if (SS.primary) SS.selected.push(SS.primary);
+      const need = P.strokeCount - SS.selected.length;
+      if (need > 0 && SS.candidates?.length && SS.edgeMag) {
+        const suppress = 0.12 * diag();
+        const feats = StrokeExtractor.selectDiverse(SS.candidates, need, suppress, SS.edgeMag, W, H);
+        SS.selected.push(...feats);
+      }
+    },
+    draw(canvas) {
+      drawStrokes(canvas, SS.selected || [], ['#fff', '#7c5af6', '#4ade80']);
+    },
+    stat() { return SS.selected ? `${SS.selected.length} stroke${SS.selected.length === 1 ? '' : 's'}` : '—'; },
+  },
 ];
 
 function getSteps() { return mode === 'strokes' ? STROKE_STEPS : STEPS; }
@@ -456,6 +479,22 @@ function drawGradient(ctx, pts, lineWidth = 1) {
     ctx.stroke();
     drawn += seg.length;
   }
+}
+
+function drawStrokes(canvas, strokes, colors) {
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  strokes.forEach((c, i) => {
+    if (!c || c.length < 2) return;
+    ctx.strokeStyle = colors[i] || `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
+    ctx.lineWidth   = i === 0 ? 3 : 2; // primary bolder than complementary
+    ctx.beginPath();
+    ctx.moveTo(c[0].x, c[0].y);
+    for (let j = 1; j < c.length; j++) ctx.lineTo(c[j].x, c[j].y);
+    ctx.stroke();
+  });
 }
 
 function makeSVG(layers, w, h, sw) {
