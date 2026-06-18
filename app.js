@@ -5,6 +5,7 @@ import { ContourSimplifier } from './ContourSimplifier.js';
 import { PathPlanner }       from './PathPlanner.js';
 import { BezierPathBuilder } from './BezierPathBuilder.js';
 import { StrokeExtractor }   from './StrokeExtractor.js';
+import { RegionTracer }      from './RegionTracer.js';
 
 // ── Constants ──────────────────────────────────────────────────────────
 const MAX_SIZE = 600;
@@ -30,8 +31,7 @@ const SS = {
   massBinary:   null,
   massContours: null,
   primary:      null,
-  edges:        null,
-  edgeMag:      null,
+  layerBinary:  null,
   candidates:   null,
   selected:     null,
 };
@@ -55,7 +55,7 @@ const P = {
   // ── Strokes mode ──
   strokeCount:       1,    // 1–3: primary + up to 2 complementary
   strokeAbstraction: 0.5,  // 0 = hug contour, 1 = bold sweeping curves
-  edgeSensitivity:   0.5,  // 0 = only strongest edges, 1 = admit more
+  layerThreshold:    90,   // darker threshold for complementary tonal-region loops
 };
 const P_DEFAULTS = { ...P };
 let multiPath = false;
@@ -356,7 +356,7 @@ const STROKE_STEPS = [
     run() {
       if (!SS.leveled) { SS.massContours = []; SS.primary = null; return; }
       SS.massBinary   = Thresholder.apply(SS.leveled, P.threshold);
-      const raw       = ContourTracer.trace(SS.massBinary, W, H);
+      const raw       = RegionTracer.trace(SS.massBinary, W, H);
       SS.massContours = ContourSimplifier.sortByLength(raw);
       SS.primary      = SS.massContours[0] || null;
     },
@@ -386,37 +386,40 @@ const STROKE_STEPS = [
     stat() { return SS.primary ? `primary ${SS.primary.length} pts · t=${P.threshold}` : '—'; },
   },
   {
-    num: '03', name: 'EDGE CANDIDATES',
-    desc: 'strongest internal edges → complementary-feature candidates',
+    num: '03', name: 'TONAL LAYERS',
+    desc: 'deeper-shadow region boundaries → complementary loops',
     controls: [
-      { key: 'edgeSensitivity', label: 'Edge Sens', min: 0, max: 1, step: 0.05, firstAffected: 2 },
+      { key: 'layerThreshold', label: 'Layer T', min: 0, max: 255, step: 1, firstAffected: 2 },
     ],
+    auto() {
+      if (!SS.leveled) return;
+      setParam('layerThreshold', Thresholder.otsu3(SS.leveled)[0]);
+      scheduleRun(2);
+    },
     run() {
-      if (!SS.leveled) { SS.candidates = []; SS.edgeMag = null; SS.edges = null; return; }
-      SS.edgeMag      = EdgeDetector.sobel(SS.leveled, W, H);
-      const nms       = EdgeDetector.nonMaxSuppression(SS.leveled, W, H);
-      const highFrac  = lerp(0.30, 0.08, P.edgeSensitivity); // low sens → fewer, stronger edges
-      SS.edges        = EdgeDetector.hysteresis(nms, W, H, highFrac * 0.4, highFrac);
-      const raw       = ContourTracer.trace(SS.edges, W, H);
-      const minArc    = 0.04 * diag();
-      SS.candidates   = ContourSimplifier.filter(raw, 0, minArc);
+      if (!SS.leveled) { SS.candidates = []; SS.layerBinary = null; return; }
+      SS.layerBinary = Thresholder.apply(SS.leveled, P.layerThreshold);
+      const raw      = RegionTracer.trace(SS.layerBinary, W, H);
+      const minArc   = 0.04 * diag();
+      SS.candidates  = ContourSimplifier.filter(raw, 0, minArc);
     },
     draw(canvas) {
       canvas.width = W; canvas.height = H;
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-      ctx.lineCap = 'round';
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       (SS.candidates || []).forEach((c, i) => {
         if (c.length < 2) return;
         ctx.strokeStyle = `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(c[0].x, c[0].y);
         for (let j = 1; j < c.length; j++) ctx.lineTo(c[j].x, c[j].y);
+        ctx.closePath();
         ctx.stroke();
       });
     },
-    stat() { return SS.candidates ? `${SS.candidates.length} candidates` : '—'; },
+    stat() { return SS.candidates ? `${SS.candidates.length} loops · t=${P.layerThreshold}` : '—'; },
   },
   {
     num: '04', name: 'RANKED SELECTION',
@@ -428,9 +431,10 @@ const STROKE_STEPS = [
       SS.selected = [];
       if (SS.primary) SS.selected.push(SS.primary);
       const need = P.strokeCount - SS.selected.length;
-      if (need > 0 && SS.candidates?.length && SS.edgeMag) {
+      if (need > 0 && SS.candidates?.length) {
         const suppress = 0.12 * diag();
-        const feats = StrokeExtractor.selectDiverse(SS.candidates, need, suppress, SS.edgeMag, W, H);
+        const seeds = SS.primary ? [SS.primary] : [];
+        const feats = StrokeExtractor.selectDiverse(SS.candidates, need, suppress, seeds);
         SS.selected.push(...feats);
       }
     },
@@ -452,7 +456,9 @@ const STROKE_STEPS = [
       const eps  = lerp(1.5, 12, P.strokeAbstraction);
       const iter = Math.round(lerp(0, 4, P.strokeAbstraction));
       const layers = SS.selected.map(stroke => {
-        const simplified = ContourSimplifier.rdp(stroke, eps);
+        // Region loops are open arrays; repeat the first point so the curve closes.
+        const closed     = stroke.length >= 2 ? [...stroke, stroke[0]] : stroke;
+        const simplified = ContourSimplifier.rdp(closed, eps);
         const smoothed   = BezierPathBuilder.smooth(simplified, iter);
         return { d: BezierPathBuilder.build(smoothed, 0.5), color: 'black' };
       }).filter(l => l.d);
@@ -621,10 +627,11 @@ async function loadFile(file) {
   S.srcCanvas = offscreen;
   S.imageData = ctx.getImageData(0, 0, W, H);
 
-  // Auto-detect threshold for the new image before running pipeline
+  // Auto-detect thresholds for the new image before running pipeline
   const gray = EdgeDetector.toGrayscale(S.imageData);
   const leveled = EdgeDetector.levels(gray, P.blackPoint, P.whitePoint, P.gamma);
   setParam('threshold', Thresholder.otsu(leveled));
+  setParam('layerThreshold', Thresholder.otsu3(leveled)[0]); // darker level for tonal-layer loops
 
   showPipeline();
   await runFrom(0);

@@ -19,46 +19,35 @@ export class StrokeExtractor {
     return Math.hypot(maxX - minX, maxY - minY);
   }
 
-  // Mean normalised Sobel magnitude (0–255) sampled at each contour point.
-  // Faint texture edges score low even when long; crisp structural edges high.
-  static avgEdgeStrength(contour, edgeMag, width, height) {
-    let sum = 0;
-    for (const p of contour) {
-      const x = Math.min(width - 1,  Math.max(0, Math.round(p.x)));
-      const y = Math.min(height - 1, Math.max(0, Math.round(p.y)));
-      sum += edgeMag[y * width + x];
-    }
-    return sum / contour.length;
-  }
-
-  // Importance score. √arcLength (not raw length) keeps a long faint line from
-  // always out-ranking a short crisp feature like a dark eye.
-  static score(contour, edgeMag, width, height) {
-    const len    = ContourSimplifier.arcLength(contour);
-    const eStr   = this.avgEdgeStrength(contour, edgeMag, width, height);
-    const spread = this.spatialSpread(contour);
-    return Math.sqrt(len) * eStr * spread;
+  // Importance score for a tonal-region loop. √arcLength (not raw length)
+  // keeps a long winding loop from dwarfing a compact-but-significant one;
+  // spatialSpread rewards loops that span the subject over tiny specks.
+  static score(contour) {
+    return Math.sqrt(ContourSimplifier.arcLength(contour)) * this.spatialSpread(contour);
   }
 
   // Greedy selection with spatial suppression so the kept strokes are
   // complementary (different regions) rather than redundant copies of the
-  // same dominant edge. Returns up to `count` contours, highest score first.
-  static selectDiverse(candidates, count, suppressRadius, edgeMag, width, height) {
+  // same mass. `seeds` are already-chosen contours (e.g. the primary loop)
+  // whose locations suppress nearby candidates but are not returned.
+  // Returns up to `count` contours, highest score first.
+  static selectDiverse(candidates, count, suppressRadius, seeds = []) {
     if (count <= 0 || !candidates.length) return [];
     const scored = candidates.map(c => ({
       contour:  c,
-      score:    this.score(c, edgeMag, width, height),
+      score:    this.score(c),
       centroid: this.centroid(c),
     }));
     scored.sort((a, b) => b.score - a.score);
 
-    const picked = [];
+    const picked = seeds.map(c => ({ centroid: this.centroid(c) })); // suppression only
+    const result = [];
     for (const cand of scored) {
-      if (picked.length >= count) break;
+      if (result.length >= count) break;
       const tooClose = picked.some(p =>
         Math.hypot(p.centroid.x - cand.centroid.x, p.centroid.y - cand.centroid.y) < suppressRadius);
-      if (!tooClose) picked.push(cand);
+      if (!tooClose) { picked.push(cand); result.push(cand.contour); }
     }
-    return picked.map(p => p.contour);
+    return result;
   }
 }
