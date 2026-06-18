@@ -440,6 +440,27 @@ const STROKE_STEPS = [
     },
     stat() { return SS.selected ? `${SS.selected.length} stroke${SS.selected.length === 1 ? '' : 's'}` : '—'; },
   },
+  {
+    num: '05', name: 'STROKE OUTPUT',
+    desc: 'pure black strokes — no tone, no fill',
+    isSVG: true,
+    controls: [
+      { key: 'strokeWidth', label: 'Stroke Width', min: 0.5, max: 6, step: 0.5, firstAffected: 4 },
+    ],
+    run() {
+      if (!SS.selected?.length) { S.svgString = ''; return; }
+      const eps  = lerp(1.5, 12, P.strokeAbstraction);
+      const iter = Math.round(lerp(0, 4, P.strokeAbstraction));
+      const layers = SS.selected.map(stroke => {
+        const simplified = ContourSimplifier.rdp(stroke, eps);
+        const smoothed   = BezierPathBuilder.smooth(simplified, iter);
+        return { d: BezierPathBuilder.build(smoothed, 0.5), color: 'black' };
+      }).filter(l => l.d);
+      S.svgString = layers.length ? makeSVG(layers, W, H, P.strokeWidth) : '';
+    },
+    draw() {},
+    stat() { return S.svgString ? `${(S.svgString.length / 1024).toFixed(1)} KB` : '—'; },
+  },
 ];
 
 function getSteps() { return mode === 'strokes' ? STROKE_STEPS : STEPS; }
