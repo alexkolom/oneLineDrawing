@@ -341,6 +341,49 @@ const STROKE_STEPS = [
     },
     stat() { return SS.leveled ? `bp ${P.blackPoint}  wp ${P.whitePoint}  γ ${P.gamma.toFixed(2)}` : '—'; },
   },
+  {
+    num: '02', name: 'TONAL MASS',
+    desc: 'largest dark region boundary → primary silhouette loop',
+    controls: [
+      { key: 'threshold', label: 'Threshold', min: 0, max: 255, step: 1, firstAffected: 1 },
+    ],
+    auto() {
+      if (!SS.leveled) return;
+      setParam('threshold', Thresholder.otsu(SS.leveled));
+      scheduleRun(1);
+    },
+    run() {
+      if (!SS.leveled) { SS.massContours = []; SS.primary = null; return; }
+      SS.massBinary   = Thresholder.apply(SS.leveled, P.threshold);
+      const raw       = ContourTracer.trace(SS.massBinary, W, H);
+      SS.massContours = ContourSimplifier.sortByLength(raw);
+      SS.primary      = SS.massContours[0] || null;
+    },
+    draw(canvas) {
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      (SS.massContours || []).forEach(c => {
+        if (c.length < 2) return;
+        ctx.strokeStyle = 'rgba(120,120,140,0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(c[0].x, c[0].y);
+        for (let j = 1; j < c.length; j++) ctx.lineTo(c[j].x, c[j].y);
+        ctx.stroke();
+      });
+      if (SS.primary) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(SS.primary[0].x, SS.primary[0].y);
+        for (let j = 1; j < SS.primary.length; j++) ctx.lineTo(SS.primary[j].x, SS.primary[j].y);
+        ctx.stroke();
+      }
+    },
+    stat() { return SS.primary ? `primary ${SS.primary.length} pts · t=${P.threshold}` : '—'; },
+  },
 ];
 
 function getSteps() { return mode === 'strokes' ? STROKE_STEPS : STEPS; }
