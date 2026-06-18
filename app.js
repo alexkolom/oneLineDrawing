@@ -422,8 +422,7 @@ const STROKE_STEPS = [
     num: '04', name: 'RANKED SELECTION',
     desc: 'primary + top complementary features (diversity-suppressed)',
     controls: [
-      { key: 'strokeCount',       label: 'Strokes',     min: 1, max: 3, step: 1,    firstAffected: 3 },
-      { key: 'strokeAbstraction', label: 'Abstraction', min: 0, max: 1, step: 0.05, firstAffected: 4 },
+      { key: 'strokeCount', label: 'Strokes', min: 1, max: 3, step: 1, firstAffected: 3 },
     ],
     run() {
       SS.selected = [];
@@ -445,7 +444,8 @@ const STROKE_STEPS = [
     desc: 'pure black strokes — no tone, no fill',
     isSVG: true,
     controls: [
-      { key: 'strokeWidth', label: 'Stroke Width', min: 0.5, max: 6, step: 0.5, firstAffected: 4 },
+      { key: 'strokeAbstraction', label: 'Abstraction',  min: 0,   max: 1, step: 0.05, firstAffected: 4 },
+      { key: 'strokeWidth',       label: 'Stroke Width', min: 0.5, max: 6, step: 0.5,  firstAffected: 4 },
     ],
     run() {
       if (!SS.selected?.length) { S.svgString = ''; return; }
@@ -584,7 +584,9 @@ async function runFrom(fromIdx) {
     removeSpinner(i);
 
     if (step.isSVG) {
-      console.log(`SVG step: smoothed=${S.smoothed?.length ?? 'null'} pts, svgString=${S.svgString?.length ?? 'null'} chars`);
+      if (mode === 'pipeline') {
+        console.log(`SVG step: smoothed=${S.smoothed?.length ?? 'null'} pts, svgString=${S.svgString?.length ?? 'null'} chars`);
+      }
       renderSVG(i);
     } else {
       const canvas = document.querySelector(`#step-${i} canvas`);
@@ -877,6 +879,7 @@ function init() {
   const btnAutoAll = document.getElementById('btnAutoAll');
   if (btnAutoAll) {
     btnAutoAll.addEventListener('click', () => {
+      if (mode !== 'pipeline') return;
       if (!S.leveled) return;
       const { blackPoint, whitePoint } = EdgeDetector.analyzeHistogram(S.gray);
       setParam('blackPoint', blackPoint);
