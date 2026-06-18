@@ -23,6 +23,21 @@ const S = {
   svgString:   null,
 };
 
+// ── Strokes-mode state (parallel to S; only one mode active at a time) ──
+const SS = {
+  leveled:      null,
+  massBinary:   null,
+  massContours: null,
+  primary:      null,
+  edges:        null,
+  edgeMag:      null,
+  candidates:   null,
+  selected:     null,
+};
+let mode = 'pipeline'; // 'pipeline' | 'strokes'
+
+const lerp = (a, b, t) => a + (b - a) * t;
+
 // ── User params (all spatial params are fractions of diagonal d=√(W²+H²)) ──
 const P = {
   blackPoint:      0,
@@ -36,6 +51,10 @@ const P = {
   smoothIter:      1,
   tension:         0.5,
   strokeWidth:     1.0,
+  // ── Strokes mode ──
+  strokeCount:       1,    // 1–3: primary + up to 2 complementary
+  strokeAbstraction: 0.5,  // 0 = hug contour, 1 = bold sweeping curves
+  edgeSensitivity:   0.5,  // 0 = only strongest edges, 1 = admit more
 };
 const P_DEFAULTS = { ...P };
 let multiPath = false;
@@ -301,6 +320,31 @@ const STEPS = [
   },
 ];
 
+// ── Strokes-mode step definitions ────────────────────────────────────────
+const STROKE_STEPS = [
+  {
+    num: '01', name: 'SOURCE',
+    desc: 'grayscale + levels — shared front end',
+    controls: [
+      { key: 'blackPoint', label: 'Black Pt', min: 0,    max: 200, step: 1,    firstAffected: 0 },
+      { key: 'whitePoint', label: 'White Pt', min: 55,   max: 255, step: 1,    firstAffected: 0 },
+      { key: 'gamma',      label: 'Gamma',    min: 0.25, max: 4.0, step: 0.05, firstAffected: 0 },
+    ],
+    run() {
+      if (!S.imageData) { SS.leveled = null; return; }
+      const gray = EdgeDetector.toGrayscale(S.imageData);
+      SS.leveled = EdgeDetector.levels(gray, P.blackPoint, P.whitePoint, P.gamma);
+    },
+    draw(canvas) {
+      if (!SS.leveled) return;
+      putImageData(canvas, EdgeDetector.toImageData(SS.leveled, W, H));
+    },
+    stat() { return SS.leveled ? `bp ${P.blackPoint}  wp ${P.whitePoint}  γ ${P.gamma.toFixed(2)}` : '—'; },
+  },
+];
+
+function getSteps() { return mode === 'strokes' ? STROKE_STEPS : STEPS; }
+
 // ── Drawing helpers ────────────────────────────────────────────────────
 function putImageData(canvas, imageData) {
   canvas.width  = imageData.width;
@@ -379,9 +423,9 @@ async function runFrom(fromIdx) {
   const id = ++runId;
   setStatus('processing…', true);
 
-  for (let i = fromIdx; i < STEPS.length; i++) {
+  for (let i = fromIdx; i < getSteps().length; i++) {
     if (runId !== id) return;
-    const step = STEPS[i];
+    const step = getSteps()[i];
     const card = document.getElementById(`step-${i}`);
     if (!card) { console.warn(`Step card #step-${i} not found — skipping`); continue; }
 
@@ -515,7 +559,7 @@ function createStepCards() {
   const pipeline = document.getElementById('pipeline');
   pipeline.innerHTML = '';
 
-  STEPS.forEach((step, i) => {
+  getSteps().forEach((step, i) => {
     if (i > 0) {
       const conn = document.createElement('div');
       conn.className = 'conn';
@@ -601,7 +645,8 @@ function createStepCards() {
         exportBtn.addEventListener('click', exportSVG);
         ctrl.appendChild(exportBtn);
 
-        // Multi-path layer controls (hidden until toggle is on)
+        // Multi-path layer controls (hidden until toggle is on) — pipeline mode only
+        if (mode === 'pipeline') {
         const mpDiv = document.createElement('div');
         mpDiv.id = 'multipath-controls';
         mpDiv.style.cssText = 'display:none; flex-wrap:wrap; gap:22px; width:100%; margin-top:4px';
@@ -640,6 +685,7 @@ function createStepCards() {
         });
 
         ctrl.appendChild(mpDiv);
+        }
       }
 
       card.appendChild(ctrl);
@@ -726,6 +772,18 @@ function init() {
         });
       }
       if (S.leveled) runFrom(8);
+    });
+  }
+
+  const btnMode = document.getElementById('btnMode');
+  if (btnMode) {
+    btnMode.addEventListener('click', () => {
+      mode = mode === 'pipeline' ? 'strokes' : 'pipeline';
+      btnMode.textContent = `Mode: ${mode === 'strokes' ? 'Strokes' : 'Pipeline'}`;
+      btnMode.style.color       = mode === 'strokes' ? 'var(--accent)' : '';
+      btnMode.style.borderColor = mode === 'strokes' ? 'var(--accent)' : '';
+      createStepCards();
+      if (S.imageData) { showPipeline(); runFrom(0); }
     });
   }
 }
