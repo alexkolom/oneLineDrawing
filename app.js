@@ -4,7 +4,6 @@ import { ContourTracer }     from './ContourTracer.js';
 import { ContourSimplifier } from './ContourSimplifier.js';
 import { PathPlanner }       from './PathPlanner.js';
 import { BezierPathBuilder } from './BezierPathBuilder.js';
-import { StrokeExtractor }   from './StrokeExtractor.js';
 import { RegionTracer }      from './RegionTracer.js';
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -33,7 +32,7 @@ const SS = {
   primary:      null,
   layerBinary:  null,
   candidates:   null,
-  selected:     null,
+  linkedPath:   null,
 };
 let mode = 'pipeline'; // 'pipeline' | 'strokes'
 
@@ -52,8 +51,7 @@ const P = {
   smoothIter:      1,
   tension:         0.5,
   strokeWidth:     1.0,
-  // ── Strokes mode ──
-  strokeCount:       1,    // 1–3: primary + up to 2 complementary
+  // ── Strokes mode ── (also reuses maxJumpFrac for pen-up control)
   strokeAbstraction: 0.5,  // 0 = hug contour, 1 = bold sweeping curves
   layerThreshold:    90,   // darker threshold for complementary tonal-region loops
 };
@@ -357,7 +355,9 @@ const STROKE_STEPS = [
       if (!SS.leveled) { SS.massContours = []; SS.primary = null; return; }
       SS.massBinary   = Thresholder.apply(SS.leveled, P.threshold);
       const raw       = RegionTracer.trace(SS.massBinary, W, H);
-      SS.massContours = ContourSimplifier.sortByLength(raw);
+      const minArc    = 0.04 * diag();
+      const filtered  = ContourSimplifier.filter(raw, 0, minArc);
+      SS.massContours = ContourSimplifier.sortByLength(filtered);
       SS.primary      = SS.massContours[0] || null;
     },
     draw(canvas) {
@@ -422,47 +422,46 @@ const STROKE_STEPS = [
     stat() { return SS.candidates ? `${SS.candidates.length} loops · t=${P.layerThreshold}` : '—'; },
   },
   {
-    num: '04', name: 'RANKED SELECTION',
-    desc: 'primary + top complementary features (diversity-suppressed)',
+    num: '04', name: 'LINK PATH',
+    desc: 'connect all region loops into a continuous line · pen-up only across big gaps',
     controls: [
-      { key: 'strokeCount', label: 'Strokes', min: 1, max: 3, step: 1, firstAffected: 3 },
+      { key: 'maxJumpFrac',       label: 'Max Jump',    min: 0.01, max: 0.4, step: 0.01, firstAffected: 3 },
+      { key: 'strokeAbstraction', label: 'Abstraction', min: 0,    max: 1,   step: 0.05, firstAffected: 3 },
     ],
     run() {
-      SS.selected = [];
-      if (SS.primary) SS.selected.push(SS.primary);
-      const need = P.strokeCount - SS.selected.length;
-      if (need > 0 && SS.candidates?.length) {
-        const suppress = 0.12 * diag();
-        const seeds = SS.primary ? [SS.primary] : [];
-        const feats = StrokeExtractor.selectDiverse(SS.candidates, need, suppress, seeds);
-        SS.selected.push(...feats);
-      }
+      const loops = [...(SS.massContours || []), ...(SS.candidates || [])];
+      if (!loops.length) { SS.linkedPath = []; return; }
+      const eps        = lerp(1.5, 12, P.strokeAbstraction);
+      const closed     = loops.map(l => (l.length >= 2 ? [...l, l[0]] : l)); // close each loop
+      const simplified = ContourSimplifier.simplify(closed, eps);
+      SS.linkedPath    = PathPlanner.solve(simplified, { maxJumpFrac: P.maxJumpFrac, width: W, height: H });
     },
     draw(canvas) {
-      drawStrokes(canvas, SS.selected || [], ['#fff', '#7c5af6', '#4ade80']);
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      drawGradient(ctx, SS.linkedPath || [], 2);
     },
-    stat() { return SS.selected ? `${SS.selected.length} stroke${SS.selected.length === 1 ? '' : 's'}` : '—'; },
+    stat() {
+      if (!SS.linkedPath) return '—';
+      const pts  = SS.linkedPath.filter(p => p !== null).length;
+      const gaps = SS.linkedPath.filter(p => p === null).length;
+      return `${pts.toLocaleString()} pts · ${gaps} pen-up${gaps !== 1 ? 's' : ''}`;
+    },
   },
   {
     num: '05', name: 'STROKE OUTPUT',
     desc: 'pure black strokes — no tone, no fill',
     isSVG: true,
     controls: [
-      { key: 'strokeAbstraction', label: 'Abstraction',  min: 0,   max: 1, step: 0.05, firstAffected: 4 },
-      { key: 'strokeWidth',       label: 'Stroke Width', min: 0.5, max: 6, step: 0.5,  firstAffected: 4 },
+      { key: 'strokeWidth', label: 'Stroke Width', min: 0.5, max: 6, step: 0.5, firstAffected: 4 },
     ],
     run() {
-      if (!SS.selected?.length) { S.svgString = ''; return; }
-      const eps  = lerp(1.5, 12, P.strokeAbstraction);
-      const iter = Math.round(lerp(0, 4, P.strokeAbstraction));
-      const layers = SS.selected.map(stroke => {
-        // Region loops are open arrays; repeat the first point so the curve closes.
-        const closed     = stroke.length >= 2 ? [...stroke, stroke[0]] : stroke;
-        const simplified = ContourSimplifier.rdp(closed, eps);
-        const smoothed   = BezierPathBuilder.smooth(simplified, iter);
-        return { d: BezierPathBuilder.build(smoothed, 0.5), color: 'black' };
-      }).filter(l => l.d);
-      S.svgString = layers.length ? makeSVG(layers, W, H, P.strokeWidth) : '';
+      if (!SS.linkedPath?.length) { S.svgString = ''; return; }
+      const iter     = Math.round(lerp(0, 4, P.strokeAbstraction));
+      const smoothed = BezierPathBuilder.smooth(SS.linkedPath, iter);
+      const d        = BezierPathBuilder.build(smoothed, 0.5);
+      S.svgString    = d ? makeSVG([{ d, color: 'black' }], W, H, P.strokeWidth) : '';
     },
     draw() {},
     stat() { return S.svgString ? `${(S.svgString.length / 1024).toFixed(1)} KB` : '—'; },
@@ -506,22 +505,6 @@ function drawGradient(ctx, pts, lineWidth = 1) {
     ctx.stroke();
     drawn += seg.length;
   }
-}
-
-function drawStrokes(canvas, strokes, colors) {
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  strokes.forEach((c, i) => {
-    if (!c || c.length < 2) return;
-    ctx.strokeStyle = colors[i] || `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
-    ctx.lineWidth   = i === 0 ? 3 : 2; // primary bolder than complementary
-    ctx.beginPath();
-    ctx.moveTo(c[0].x, c[0].y);
-    for (let j = 1; j < c.length; j++) ctx.lineTo(c[j].x, c[j].y);
-    ctx.stroke();
-  });
 }
 
 function makeSVG(layers, w, h, sw) {
