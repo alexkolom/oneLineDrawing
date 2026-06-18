@@ -384,6 +384,39 @@ const STROKE_STEPS = [
     },
     stat() { return SS.primary ? `primary ${SS.primary.length} pts · t=${P.threshold}` : '—'; },
   },
+  {
+    num: '03', name: 'EDGE CANDIDATES',
+    desc: 'strongest internal edges → complementary-feature candidates',
+    controls: [
+      { key: 'edgeSensitivity', label: 'Edge Sens', min: 0, max: 1, step: 0.05, firstAffected: 2 },
+    ],
+    run() {
+      if (!SS.leveled) { SS.candidates = []; SS.edgeMag = null; SS.edges = null; return; }
+      SS.edgeMag      = EdgeDetector.sobel(SS.leveled, W, H);
+      const nms       = EdgeDetector.nonMaxSuppression(SS.leveled, W, H);
+      const highFrac  = lerp(0.30, 0.08, P.edgeSensitivity); // low sens → fewer, stronger edges
+      SS.edges        = EdgeDetector.hysteresis(nms, W, H, highFrac * 0.4, highFrac);
+      const raw       = ContourTracer.trace(SS.edges, W, H);
+      const minArc    = 0.04 * diag();
+      SS.candidates   = ContourSimplifier.filter(raw, 0, minArc);
+    },
+    draw(canvas) {
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.lineCap = 'round';
+      (SS.candidates || []).forEach((c, i) => {
+        if (c.length < 2) return;
+        ctx.strokeStyle = `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(c[0].x, c[0].y);
+        for (let j = 1; j < c.length; j++) ctx.lineTo(c[j].x, c[j].y);
+        ctx.stroke();
+      });
+    },
+    stat() { return SS.candidates ? `${SS.candidates.length} candidates` : '—'; },
+  },
 ];
 
 function getSteps() { return mode === 'strokes' ? STROKE_STEPS : STEPS; }
