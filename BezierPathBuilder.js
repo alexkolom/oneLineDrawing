@@ -67,6 +67,43 @@ export class BezierPathBuilder {
     return p;
   }
 
+  // Laplacian smoothing with a continuous amount: floor(amount) full passes
+  // plus a fractional final pass blended by the remainder. Lets small values
+  // (e.g. 0.2) apply gentle smoothing — useful for sparse, simplified paths
+  // where a single full pass is already too strong. Preserves endpoints and
+  // null separators.
+  static smoothFactor(points, amount) {
+    if (amount <= 0) return points.slice();
+    const out = [];
+    let cur = [];
+    for (const p of points) {
+      if (p === null) {
+        if (cur.length) { out.push(...this._smoothSegFactor(cur, amount)); out.push(null); }
+        cur = [];
+      } else cur.push(p);
+    }
+    if (cur.length) out.push(...this._smoothSegFactor(cur, amount));
+    return out;
+  }
+
+  static _smoothSegFactor(pts, amount) {
+    let p = pts.slice();
+    const pass = (strength) => {
+      const q = p.slice();
+      for (let i = 1; i < p.length - 1; i++) {
+        const ax = (p[i-1].x + p[i].x + p[i+1].x) / 3;
+        const ay = (p[i-1].y + p[i].y + p[i+1].y) / 3;
+        q[i] = { x: p[i].x + strength * (ax - p[i].x), y: p[i].y + strength * (ay - p[i].y) };
+      }
+      p = q;
+    };
+    const whole = Math.floor(amount);
+    const frac  = amount - whole;
+    for (let k = 0; k < whole; k++) pass(1);
+    if (frac > 0) pass(frac);
+    return p;
+  }
+
   // Build a Catmull-Rom SVG path through `points` (with null pen-up separators).
   // tension: 0 = very loose/curvy, 1 = tight/near-straight. Default 0.5 (classic Catmull-Rom).
   static build(points, tension = 0.5) {
