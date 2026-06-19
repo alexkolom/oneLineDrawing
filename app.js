@@ -4,6 +4,7 @@ import { ContourTracer }     from './ContourTracer.js';
 import { ContourSimplifier } from './ContourSimplifier.js';
 import { PathPlanner }       from './PathPlanner.js';
 import { BezierPathBuilder } from './BezierPathBuilder.js';
+import { RegionTracer }      from './RegionTracer.js';
 
 // ── Constants ──────────────────────────────────────────────────────────
 const MAX_SIZE = 600;
@@ -23,6 +24,19 @@ const S = {
   svgString:   null,
 };
 
+// ── Strokes-mode state (parallel to S; only one mode active at a time) ──
+const SS = {
+  leveled:      null,
+  massBinary:   null,
+  massContours: null,
+  layerBinary:  null,
+  candidates:   null,
+  linkedPath:   null,
+};
+let mode = 'pipeline'; // 'pipeline' | 'strokes'
+
+const lerp = (a, b, t) => a + (b - a) * t;
+
 // ── User params (all spatial params are fractions of diagonal d=√(W²+H²)) ──
 const P = {
   blackPoint:      0,
@@ -36,6 +50,10 @@ const P = {
   smoothIter:      1,
   tension:         0.5,
   strokeWidth:     1.0,
+  // ── Strokes mode ── (also reuses maxJumpFrac for pen-up control)
+  strokeAbstraction: 0.5,  // 0 = hug contour, 1 = bold sweeping curves (RDP simplify)
+  strokeSmooth:      0.5,  // Laplacian smoothing amount (fractional) on the linked path
+  layerThreshold:    90,   // darker threshold for complementary tonal-region loops
 };
 const P_DEFAULTS = { ...P };
 let multiPath = false;
@@ -301,6 +319,149 @@ const STEPS = [
   },
 ];
 
+// ── Strokes-mode step definitions ────────────────────────────────────────
+const STROKE_STEPS = [
+  {
+    num: '01', name: 'SOURCE',
+    desc: 'grayscale + levels — shared front end',
+    controls: [
+      { key: 'blackPoint', label: 'Black Pt', min: 0,    max: 200, step: 1,    firstAffected: 0 },
+      { key: 'whitePoint', label: 'White Pt', min: 55,   max: 255, step: 1,    firstAffected: 0 },
+      { key: 'gamma',      label: 'Gamma',    min: 0.25, max: 4.0, step: 0.05, firstAffected: 0 },
+    ],
+    run() {
+      if (!S.imageData) { SS.leveled = null; return; }
+      const gray = EdgeDetector.toGrayscale(S.imageData);
+      SS.leveled = EdgeDetector.levels(gray, P.blackPoint, P.whitePoint, P.gamma);
+    },
+    draw(canvas) {
+      if (!SS.leveled) return;
+      putImageData(canvas, EdgeDetector.toImageData(SS.leveled, W, H));
+    },
+    stat() { return SS.leveled ? `bp ${P.blackPoint}  wp ${P.whitePoint}  γ ${P.gamma.toFixed(2)}` : '—'; },
+  },
+  {
+    num: '02', name: 'TONAL MASS',
+    desc: 'dark region boundaries at this threshold',
+    controls: [
+      { key: 'threshold', label: 'Threshold', min: 0, max: 255, step: 1, firstAffected: 1 },
+    ],
+    auto() {
+      if (!SS.leveled) return;
+      setParam('threshold', Thresholder.otsu(SS.leveled));
+      scheduleRun(1);
+    },
+    run() {
+      if (!SS.leveled) { SS.massContours = []; return; }
+      SS.massBinary   = Thresholder.apply(SS.leveled, P.threshold);
+      const raw       = RegionTracer.trace(SS.massBinary, W, H);
+      const minArc    = 0.04 * diag();
+      const filtered  = ContourSimplifier.filter(raw, 0, minArc);
+      SS.massContours = ContourSimplifier.sortByLength(filtered);
+    },
+    draw(canvas) {
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      (SS.massContours || []).forEach((c, i) => {
+        if (c.length < 2) return;
+        ctx.strokeStyle = `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(c[0].x, c[0].y);
+        for (let j = 1; j < c.length; j++) ctx.lineTo(c[j].x, c[j].y);
+        ctx.closePath();
+        ctx.stroke();
+      });
+    },
+    stat() { return SS.massContours ? `${SS.massContours.length} loops · t=${P.threshold}` : '—'; },
+  },
+  {
+    num: '03', name: 'TONAL LAYERS',
+    desc: 'deeper-shadow region boundaries → complementary loops',
+    controls: [
+      { key: 'layerThreshold', label: 'Layer T', min: 0, max: 255, step: 1, firstAffected: 2 },
+    ],
+    auto() {
+      if (!SS.leveled) return;
+      setParam('layerThreshold', Thresholder.otsu3(SS.leveled)[0]);
+      scheduleRun(2);
+    },
+    run() {
+      if (!SS.leveled) { SS.candidates = []; SS.layerBinary = null; return; }
+      SS.layerBinary = Thresholder.apply(SS.leveled, P.layerThreshold);
+      const raw      = RegionTracer.trace(SS.layerBinary, W, H);
+      const minArc   = 0.04 * diag();
+      SS.candidates  = ContourSimplifier.filter(raw, 0, minArc);
+    },
+    draw(canvas) {
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      (SS.candidates || []).forEach((c, i) => {
+        if (c.length < 2) return;
+        ctx.strokeStyle = `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(c[0].x, c[0].y);
+        for (let j = 1; j < c.length; j++) ctx.lineTo(c[j].x, c[j].y);
+        ctx.closePath();
+        ctx.stroke();
+      });
+    },
+    stat() { return SS.candidates ? `${SS.candidates.length} loops · t=${P.layerThreshold}` : '—'; },
+  },
+  {
+    num: '04', name: 'LINK PATH',
+    desc: 'connect all region loops into a continuous line · pen-up only across big gaps',
+    controls: [
+      { key: 'maxJumpFrac',       label: 'Max Jump',    min: 0.01, max: 0.4, step: 0.01, firstAffected: 3 },
+      { key: 'strokeAbstraction', label: 'Abstraction', min: 0,    max: 1,   step: 0.05, firstAffected: 3 },
+    ],
+    run() {
+      const loops = [...(SS.massContours || []), ...(SS.candidates || [])];
+      if (!loops.length) { SS.linkedPath = []; return; }
+      const eps        = lerp(1.5, 12, P.strokeAbstraction);
+      const closed     = loops.map(l => (l.length >= 2 ? [...l, l[0]] : l)); // close each loop
+      const simplified = ContourSimplifier.simplify(closed, eps);
+      SS.linkedPath    = PathPlanner.solve(simplified, { maxJumpFrac: P.maxJumpFrac, width: W, height: H });
+    },
+    draw(canvas) {
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      drawGradient(ctx, SS.linkedPath || [], 2);
+    },
+    stat() {
+      if (!SS.linkedPath) return '—';
+      const pts  = SS.linkedPath.filter(p => p !== null).length;
+      const gaps = SS.linkedPath.filter(p => p === null).length;
+      return `${pts.toLocaleString()} pts · ${gaps} pen-up${gaps !== 1 ? 's' : ''}`;
+    },
+  },
+  {
+    num: '05', name: 'STROKE OUTPUT',
+    desc: 'pure black strokes — no tone, no fill',
+    isSVG: true,
+    controls: [
+      { key: 'strokeSmooth', label: 'Smooth',       min: 0,   max: 8, step: 0.1, firstAffected: 4 },
+      { key: 'strokeWidth',  label: 'Stroke Width', min: 0.5, max: 6, step: 0.5, firstAffected: 4 },
+    ],
+    run() {
+      if (!SS.linkedPath?.length) { S.svgString = ''; return; }
+      const smoothed = BezierPathBuilder.smoothFactor(SS.linkedPath, P.strokeSmooth);
+      const d        = BezierPathBuilder.build(smoothed, 0.5);
+      S.svgString    = d ? makeSVG([{ d, color: 'black' }], W, H, P.strokeWidth) : '';
+    },
+    draw() {},
+    stat() { return S.svgString ? `${(S.svgString.length / 1024).toFixed(1)} KB` : '—'; },
+  },
+];
+
+function getSteps() { return mode === 'strokes' ? STROKE_STEPS : STEPS; }
+
 // ── Drawing helpers ────────────────────────────────────────────────────
 function putImageData(canvas, imageData) {
   canvas.width  = imageData.width;
@@ -379,9 +540,9 @@ async function runFrom(fromIdx) {
   const id = ++runId;
   setStatus('processing…', true);
 
-  for (let i = fromIdx; i < STEPS.length; i++) {
+  for (let i = fromIdx; i < getSteps().length; i++) {
     if (runId !== id) return;
-    const step = STEPS[i];
+    const step = getSteps()[i];
     const card = document.getElementById(`step-${i}`);
     if (!card) { console.warn(`Step card #step-${i} not found — skipping`); continue; }
 
@@ -404,7 +565,9 @@ async function runFrom(fromIdx) {
     removeSpinner(i);
 
     if (step.isSVG) {
-      console.log(`SVG step: smoothed=${S.smoothed?.length ?? 'null'} pts, svgString=${S.svgString?.length ?? 'null'} chars`);
+      if (mode === 'pipeline') {
+        console.log(`SVG step: smoothed=${S.smoothed?.length ?? 'null'} pts, svgString=${S.svgString?.length ?? 'null'} chars`);
+      }
       renderSVG(i);
     } else {
       const canvas = document.querySelector(`#step-${i} canvas`);
@@ -439,10 +602,11 @@ async function loadFile(file) {
   S.srcCanvas = offscreen;
   S.imageData = ctx.getImageData(0, 0, W, H);
 
-  // Auto-detect threshold for the new image before running pipeline
+  // Auto-detect thresholds for the new image before running pipeline
   const gray = EdgeDetector.toGrayscale(S.imageData);
   const leveled = EdgeDetector.levels(gray, P.blackPoint, P.whitePoint, P.gamma);
   setParam('threshold', Thresholder.otsu(leveled));
+  setParam('layerThreshold', Thresholder.otsu3(leveled)[0]); // darker level for tonal-layer loops
 
   showPipeline();
   await runFrom(0);
@@ -515,7 +679,7 @@ function createStepCards() {
   const pipeline = document.getElementById('pipeline');
   pipeline.innerHTML = '';
 
-  STEPS.forEach((step, i) => {
+  getSteps().forEach((step, i) => {
     if (i > 0) {
       const conn = document.createElement('div');
       conn.className = 'conn';
@@ -601,7 +765,8 @@ function createStepCards() {
         exportBtn.addEventListener('click', exportSVG);
         ctrl.appendChild(exportBtn);
 
-        // Multi-path layer controls (hidden until toggle is on)
+        // Multi-path layer controls (hidden until toggle is on) — pipeline mode only
+        if (mode === 'pipeline') {
         const mpDiv = document.createElement('div');
         mpDiv.id = 'multipath-controls';
         mpDiv.style.cssText = 'display:none; flex-wrap:wrap; gap:22px; width:100%; margin-top:4px';
@@ -640,6 +805,7 @@ function createStepCards() {
         });
 
         ctrl.appendChild(mpDiv);
+        }
       }
 
       card.appendChild(ctrl);
@@ -695,6 +861,7 @@ function init() {
   const btnAutoAll = document.getElementById('btnAutoAll');
   if (btnAutoAll) {
     btnAutoAll.addEventListener('click', () => {
+      if (mode !== 'pipeline') return;
       if (!S.leveled) return;
       const { blackPoint, whitePoint } = EdgeDetector.analyzeHistogram(S.gray);
       setParam('blackPoint', blackPoint);
@@ -726,6 +893,18 @@ function init() {
         });
       }
       if (S.leveled) runFrom(8);
+    });
+  }
+
+  const btnMode = document.getElementById('btnMode');
+  if (btnMode) {
+    btnMode.addEventListener('click', () => {
+      mode = mode === 'pipeline' ? 'strokes' : 'pipeline';
+      btnMode.textContent = `Mode: ${mode === 'strokes' ? 'Strokes' : 'Pipeline'}`;
+      btnMode.style.color       = mode === 'strokes' ? 'var(--accent)' : '';
+      btnMode.style.borderColor = mode === 'strokes' ? 'var(--accent)' : '';
+      createStepCards();
+      if (S.imageData) { showPipeline(); runFrom(0); }
     });
   }
 }
