@@ -29,7 +29,6 @@ const SS = {
   leveled:      null,
   massBinary:   null,
   massContours: null,
-  primary:      null,
   layerBinary:  null,
   candidates:   null,
   linkedPath:   null,
@@ -342,7 +341,7 @@ const STROKE_STEPS = [
   },
   {
     num: '02', name: 'TONAL MASS',
-    desc: 'largest dark region boundary → primary silhouette loop',
+    desc: 'dark region boundaries at this threshold',
     controls: [
       { key: 'threshold', label: 'Threshold', min: 0, max: 255, step: 1, firstAffected: 1 },
     ],
@@ -352,38 +351,30 @@ const STROKE_STEPS = [
       scheduleRun(1);
     },
     run() {
-      if (!SS.leveled) { SS.massContours = []; SS.primary = null; return; }
+      if (!SS.leveled) { SS.massContours = []; return; }
       SS.massBinary   = Thresholder.apply(SS.leveled, P.threshold);
       const raw       = RegionTracer.trace(SS.massBinary, W, H);
       const minArc    = 0.04 * diag();
       const filtered  = ContourSimplifier.filter(raw, 0, minArc);
       SS.massContours = ContourSimplifier.sortByLength(filtered);
-      SS.primary      = SS.massContours[0] || null;
     },
     draw(canvas) {
       canvas.width = W; canvas.height = H;
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      (SS.massContours || []).forEach(c => {
+      (SS.massContours || []).forEach((c, i) => {
         if (c.length < 2) return;
-        ctx.strokeStyle = 'rgba(120,120,140,0.35)';
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(c[0].x, c[0].y);
         for (let j = 1; j < c.length; j++) ctx.lineTo(c[j].x, c[j].y);
+        ctx.closePath();
         ctx.stroke();
       });
-      if (SS.primary) {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(SS.primary[0].x, SS.primary[0].y);
-        for (let j = 1; j < SS.primary.length; j++) ctx.lineTo(SS.primary[j].x, SS.primary[j].y);
-        ctx.stroke();
-      }
     },
-    stat() { return SS.primary ? `primary ${SS.primary.length} pts · t=${P.threshold}` : '—'; },
+    stat() { return SS.massContours ? `${SS.massContours.length} loops · t=${P.threshold}` : '—'; },
   },
   {
     num: '03', name: 'TONAL LAYERS',
