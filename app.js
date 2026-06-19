@@ -51,7 +51,8 @@ const P = {
   tension:         0.5,
   strokeWidth:     1.0,
   // ── Strokes mode ── (also reuses maxJumpFrac for pen-up control)
-  strokeAbstraction: 0.5,  // 0 = hug contour, 1 = bold sweeping curves
+  strokeAbstraction: 0.5,  // 0 = hug contour, 1 = bold sweeping curves (RDP simplify)
+  strokeSmooth:      2,    // Laplacian smoothing iterations on the linked path
   layerThreshold:    90,   // darker threshold for complementary tonal-region loops
 };
 const P_DEFAULTS = { ...P };
@@ -445,12 +446,12 @@ const STROKE_STEPS = [
     desc: 'pure black strokes — no tone, no fill',
     isSVG: true,
     controls: [
-      { key: 'strokeWidth', label: 'Stroke Width', min: 0.5, max: 6, step: 0.5, firstAffected: 4 },
+      { key: 'strokeSmooth', label: 'Smooth',       min: 0,   max: 8, step: 1,   firstAffected: 4 },
+      { key: 'strokeWidth',  label: 'Stroke Width', min: 0.5, max: 6, step: 0.5, firstAffected: 4 },
     ],
     run() {
       if (!SS.linkedPath?.length) { S.svgString = ''; return; }
-      const iter     = Math.round(lerp(0, 4, P.strokeAbstraction));
-      const smoothed = BezierPathBuilder.smooth(SS.linkedPath, iter);
+      const smoothed = BezierPathBuilder.smooth(SS.linkedPath, P.strokeSmooth);
       const d        = BezierPathBuilder.build(smoothed, 0.5);
       S.svgString    = d ? makeSVG([{ d, color: 'black' }], W, H, P.strokeWidth) : '';
     },
