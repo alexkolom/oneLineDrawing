@@ -54,6 +54,7 @@ const P = {
   strokeAbstraction: 0.5,  // 0 = hug contour, 1 = bold sweeping curves (RDP simplify)
   strokeSmooth:      0.5,  // Laplacian smoothing amount (fractional) on the linked path
   layerThreshold:    90,   // darker threshold for complementary tonal-region loops
+  minLoopArcFrac:    0.04, // min loop arc length / diagonal — Tonal Mass + Layers loop pruning
 };
 const P_DEFAULTS = { ...P };
 let multiPath = false;
@@ -355,7 +356,7 @@ const STROKE_STEPS = [
       if (!SS.leveled) { SS.massContours = []; return; }
       SS.massBinary   = Thresholder.apply(SS.leveled, P.threshold);
       const raw       = RegionTracer.trace(SS.massBinary, W, H);
-      const minArc    = 0.04 * diag();
+      const minArc    = P.minLoopArcFrac * diag();
       const filtered  = ContourSimplifier.filter(raw, 0, minArc);
       SS.massContours = ContourSimplifier.sortByLength(filtered);
     },
@@ -392,7 +393,7 @@ const STROKE_STEPS = [
       if (!SS.leveled) { SS.candidates = []; SS.layerBinary = null; return; }
       SS.layerBinary = Thresholder.apply(SS.leveled, P.layerThreshold);
       const raw      = RegionTracer.trace(SS.layerBinary, W, H);
-      const minArc   = 0.04 * diag();
+      const minArc   = P.minLoopArcFrac * diag();
       SS.candidates  = ContourSimplifier.filter(raw, 0, minArc);
     },
     draw(canvas) {
