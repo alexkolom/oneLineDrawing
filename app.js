@@ -33,7 +33,8 @@ const SS = {
   candidates:   null,
   linkedPath:   null,
 };
-let mode = 'pipeline'; // 'pipeline' | 'strokes'
+let mode = 'easy'; // 'easy' | 'strokes' | 'pipeline'
+let easyLevel = 'mid'; // 'low' | 'mid' | 'high'
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -637,6 +638,13 @@ async function loadFile(file) {
   S.srcCanvas = offscreen;
   S.imageData = ctx.getImageData(0, 0, W, H);
 
+  if (mode === 'easy') {
+    document.getElementById('dropzone').style.display = 'none';
+    document.getElementById('easy').style.display = 'flex';
+    await runEasy();
+    return;
+  }
+
   // Auto-detect thresholds for the new image before running pipeline
   const gray = EdgeDetector.toGrayscale(S.imageData);
   const leveled = EdgeDetector.levels(gray, P.blackPoint, P.whitePoint, P.gamma);
@@ -860,6 +868,58 @@ function showPipeline() {
   document.querySelectorAll('.step-body canvas').forEach(el => el.style.display = 'block');
 }
 
+// ── Easy mode runtime ────────────────────────────────────────────────────
+async function runEasy() {
+  if (!S.imageData) return;
+  setStatus('processing…', true);
+  await tick();
+  const gray = EdgeDetector.toGrayscale(S.imageData);
+  Object.assign(P, deriveEasyParams(gray, easyLevel));
+  saveParams();
+  // Reuse the Strokes pipeline compute steps (no step-card UI in Easy mode).
+  for (const step of STROKE_STEPS) {
+    try { await step.run(); }
+    catch (e) { console.error('Easy step failed:', e); }
+  }
+  renderEasyResult();
+  setStatus('ready', false);
+}
+
+function renderEasyResult() {
+  const wrap = document.getElementById('easyResult');
+  if (!wrap) return;
+  if (S.svgString) {
+    wrap.innerHTML = S.svgString;
+  } else {
+    wrap.innerHTML = '';
+    wrap.textContent = 'no output — try a different detail level';
+  }
+  const btn = document.getElementById('easyExport');
+  if (btn) btn.disabled = !S.svgString;
+}
+
+function updateModeUI() {
+  const btnMode = document.getElementById('btnMode');
+  if (btnMode) {
+    const label = mode === 'easy' ? 'Easy' : mode === 'strokes' ? 'Strokes' : 'Pipeline';
+    btnMode.textContent = `Mode: ${label}`;
+    btnMode.style.color       = mode !== 'pipeline' ? 'var(--accent)' : '';
+    btnMode.style.borderColor = mode !== 'pipeline' ? 'var(--accent)' : '';
+  }
+  // Pipeline-only buttons hidden outside pipeline mode.
+  const btnAutoAll  = document.getElementById('btnAutoAll');
+  const btnMultiPath = document.getElementById('btnMultiPath');
+  if (btnAutoAll)  btnAutoAll.style.display  = mode === 'pipeline' ? '' : 'none';
+  if (btnMultiPath) btnMultiPath.style.display = mode === 'pipeline' ? '' : 'none';
+  // Container visibility (only switch away from dropzone once an image exists).
+  const easy = document.getElementById('easy');
+  const pipeline = document.getElementById('pipeline');
+  if (S.imageData) {
+    if (easy)     easy.style.display     = mode === 'easy' ? 'flex' : 'none';
+    if (pipeline) pipeline.style.display = mode === 'easy' ? 'none' : 'flex';
+  }
+}
+
 function exportSVG() {
   if (!S.svgString) return;
   const blob = new Blob([S.svgString], { type: 'image/svg+xml' });
@@ -934,14 +994,36 @@ function init() {
   const btnMode = document.getElementById('btnMode');
   if (btnMode) {
     btnMode.addEventListener('click', () => {
-      mode = mode === 'pipeline' ? 'strokes' : 'pipeline';
-      btnMode.textContent = `Mode: ${mode === 'strokes' ? 'Strokes' : 'Pipeline'}`;
-      btnMode.style.color       = mode === 'strokes' ? 'var(--accent)' : '';
-      btnMode.style.borderColor = mode === 'strokes' ? 'var(--accent)' : '';
-      createStepCards();
-      if (S.imageData) { showPipeline(); runFrom(0); }
+      mode = mode === 'easy' ? 'strokes' : mode === 'strokes' ? 'pipeline' : 'easy';
+      if (mode !== 'easy') createStepCards();
+      updateModeUI();
+      if (S.imageData) {
+        if (mode === 'easy') {
+          runEasy();
+        } else {
+          showPipeline();
+          runFrom(0);
+        }
+      }
     });
   }
+
+  const easyDetail = document.getElementById('easyDetail');
+  if (easyDetail) {
+    easyDetail.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-level]');
+      if (!btn) return;
+      easyLevel = btn.dataset.level;
+      easyDetail.querySelectorAll('button').forEach(b =>
+        b.classList.toggle('active', b === btn));
+      if (S.imageData && mode === 'easy') runEasy();
+    });
+  }
+
+  const easyExport = document.getElementById('easyExport');
+  if (easyExport) easyExport.addEventListener('click', exportSVG);
+
+  updateModeUI();
 }
 
 init();
