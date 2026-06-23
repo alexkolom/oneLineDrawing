@@ -72,4 +72,21 @@ export class Thresholder {
     for (let i = 0; i < gray.length; i++) out[i] = gray[i] <= t ? 255 : 0;
     return out;
   }
+
+  // Smallest threshold t (0–255) such that the fraction of pixels with
+  // value <= t is at least targetFrac. Pairs with apply(), where value<=t
+  // is foreground. Used to guarantee an "ink budget" independent of Otsu.
+  // gray: Uint8Array. targetFrac: 0..1. Returns integer 0–255.
+  static thresholdForCoverage(gray, targetFrac) {
+    const frac = Math.max(0, Math.min(1, targetFrac));
+    const hist = new Array(256).fill(0);
+    for (const v of gray) hist[v]++;
+    const want = gray.length * frac;
+    let cum = 0;
+    for (let t = 0; t < 256; t++) {
+      cum += hist[t];
+      if (cum >= want) return t;
+    }
+    return 255;
+  }
 }
