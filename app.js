@@ -964,6 +964,14 @@ function updateModeUI() {
   const btnMultiPath = document.getElementById('btnMultiPath');
   if (btnAutoAll)  btnAutoAll.style.display  = mode === 'pipeline' ? '' : 'none';
   if (btnMultiPath) btnMultiPath.style.display = mode === 'pipeline' ? '' : 'none';
+  // Sync the Easy-bar Frame button to the shared frameOn (may have been
+  // toggled in Strokes mode), so its label is correct after a mode switch.
+  const easyFrame = document.getElementById('easyFrame');
+  if (easyFrame) {
+    easyFrame.textContent = `Frame: ${frameOn ? 'ON' : 'OFF'}`;
+    easyFrame.style.color       = frameOn ? 'var(--accent)' : '';
+    easyFrame.style.borderColor = frameOn ? 'var(--accent)' : '';
+  }
   // Container visibility (only switch away from dropzone once an image exists).
   const easy = document.getElementById('easy');
   const pipeline = document.getElementById('pipeline');
