@@ -33,7 +33,8 @@ const SS = {
   candidates:   null,
   linkedPath:   null,
 };
-let mode = 'pipeline'; // 'pipeline' | 'strokes'
+let mode = 'easy'; // 'easy' | 'strokes' | 'pipeline'
+let easyLevel = 'mid'; // 'low' | 'mid' | 'high'
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -54,6 +55,7 @@ const P = {
   strokeAbstraction: 0.5,  // 0 = hug contour, 1 = bold sweeping curves (RDP simplify)
   strokeSmooth:      0.5,  // Laplacian smoothing amount (fractional) on the linked path
   layerThreshold:    90,   // darker threshold for complementary tonal-region loops
+  minLoopArcFrac:    0.04, // min loop arc length / diagonal — Tonal Mass + Layers loop pruning
 };
 const P_DEFAULTS = { ...P };
 let multiPath = false;
@@ -104,6 +106,64 @@ function resetParams() {
 
 // ── Step definitions ────────────────────────────────────────────────────
 function diag() { return Math.sqrt(W * W + H * H) || 1; }
+
+// ── Easy mode: detail-level table + auto-deriver ─────────────────────────
+// Design: the SILHOUETTE always uses the proven Otsu threshold (the same one
+// the manual path uses), so the subject's outline is never cut. The detail
+// dial controls how much INTERIOR detail to add (deeper-shadow layers + loop
+// pruning) and how tightly the line hugs contours (abstraction). Coverage is
+// used only as a safety FLOOR — it bumps the threshold up if Otsu lands on a
+// near-empty result on a very low-contrast image. It never overrides a good
+// Otsu silhouette. Numbers are tunable starting points.
+const EASY_LEVELS = {
+  // layerDepth scales the dark Otsu-3 boundary: <1 pushes it darker (less
+  // interior detail), 1.0 keeps the full interior. minMassCoverage is the
+  // ink-floor safety net only.
+  low:  { minMassCoverage: 0.05, layerDepth: 0.45, strokeAbstraction: 0.30, strokeSmooth: 3.0, minLoopArcFrac: 0.07, strokeWidth: 1.5 },
+  mid:  { minMassCoverage: 0.06, layerDepth: 0.75, strokeAbstraction: 0.12, strokeSmooth: 1.5, minLoopArcFrac: 0.04, strokeWidth: 1.0 },
+  high: { minMassCoverage: 0.07, layerDepth: 1.00, strokeAbstraction: 0.00, strokeSmooth: 0.6, minLoopArcFrac: 0.02, strokeWidth: 1.0 },
+};
+
+// Fraction of pixels with value <= t (i.e. foreground under Thresholder.apply).
+function coverageAt(gray, t) {
+  let n = 0;
+  for (const v of gray) if (v <= t) n++;
+  return gray.length ? n / gray.length : 0;
+}
+
+// Pure: (grayscale Uint8Array, level) -> full Easy param set.
+// Auto-levels from the histogram (fixes "tone wrong"), anchors the silhouette
+// on Otsu with a coverage floor (fixes "missed contours" without cutting the
+// subject), and scales interior detail + abstraction by detail level.
+function deriveEasyParams(gray, level) {
+  const cfg = EASY_LEVELS[level] || EASY_LEVELS.mid;
+  const { blackPoint, whitePoint } = EdgeDetector.analyzeHistogram(gray);
+  // Gamma from mean brightness: dark images get lifted, bright left neutral.
+  let sum = 0;
+  for (const v of gray) sum += v;
+  const mean = sum / gray.length; // 0..255
+  const gamma = mean < 100 ? 0.70 : mean > 170 ? 1.00 : 0.85;
+  const leveled = EdgeDetector.levels(gray, blackPoint, whitePoint, gamma);
+
+  // Silhouette: Otsu (proven), raised to the ink floor only if too sparse.
+  let threshold = Thresholder.otsu(leveled);
+  if (coverageAt(leveled, threshold) < cfg.minMassCoverage) {
+    threshold = Thresholder.thresholdForCoverage(leveled, cfg.minMassCoverage);
+  }
+
+  // Interior detail: the dark Otsu-3 boundary, pushed deeper for lower levels.
+  const [t1] = Thresholder.otsu3(leveled);
+  const layerThreshold = Math.max(0, Math.round(t1 * cfg.layerDepth));
+
+  return {
+    blackPoint, whitePoint, gamma,
+    threshold, layerThreshold,
+    strokeAbstraction: cfg.strokeAbstraction,
+    strokeSmooth:      cfg.strokeSmooth,
+    minLoopArcFrac:    cfg.minLoopArcFrac,
+    strokeWidth:       cfg.strokeWidth,
+  };
+}
 
 const STEPS = [
   {
@@ -355,7 +415,7 @@ const STROKE_STEPS = [
       if (!SS.leveled) { SS.massContours = []; return; }
       SS.massBinary   = Thresholder.apply(SS.leveled, P.threshold);
       const raw       = RegionTracer.trace(SS.massBinary, W, H);
-      const minArc    = 0.04 * diag();
+      const minArc    = P.minLoopArcFrac * diag();
       const filtered  = ContourSimplifier.filter(raw, 0, minArc);
       SS.massContours = ContourSimplifier.sortByLength(filtered);
     },
@@ -392,7 +452,7 @@ const STROKE_STEPS = [
       if (!SS.leveled) { SS.candidates = []; SS.layerBinary = null; return; }
       SS.layerBinary = Thresholder.apply(SS.leveled, P.layerThreshold);
       const raw      = RegionTracer.trace(SS.layerBinary, W, H);
-      const minArc   = 0.04 * diag();
+      const minArc   = P.minLoopArcFrac * diag();
       SS.candidates  = ContourSimplifier.filter(raw, 0, minArc);
     },
     draw(canvas) {
@@ -601,6 +661,13 @@ async function loadFile(file) {
 
   S.srcCanvas = offscreen;
   S.imageData = ctx.getImageData(0, 0, W, H);
+
+  if (mode === 'easy') {
+    document.getElementById('dropzone').style.display = 'none';
+    document.getElementById('easy').style.display = 'flex';
+    await runEasy();
+    return;
+  }
 
   // Auto-detect thresholds for the new image before running pipeline
   const gray = EdgeDetector.toGrayscale(S.imageData);
@@ -825,6 +892,58 @@ function showPipeline() {
   document.querySelectorAll('.step-body canvas').forEach(el => el.style.display = 'block');
 }
 
+// ── Easy mode runtime ────────────────────────────────────────────────────
+async function runEasy() {
+  if (!S.imageData) return;
+  setStatus('processing…', true);
+  await tick();
+  const gray = EdgeDetector.toGrayscale(S.imageData);
+  Object.assign(P, deriveEasyParams(gray, easyLevel));
+  saveParams();
+  // Reuse the Strokes pipeline compute steps (no step-card UI in Easy mode).
+  for (const step of STROKE_STEPS) {
+    try { await step.run(); }
+    catch (e) { console.error('Easy step failed:', e); }
+  }
+  renderEasyResult();
+  setStatus('ready', false);
+}
+
+function renderEasyResult() {
+  const wrap = document.getElementById('easyResult');
+  if (!wrap) return;
+  if (S.svgString) {
+    wrap.innerHTML = S.svgString;
+  } else {
+    wrap.innerHTML = '';
+    wrap.textContent = 'no output — try a different detail level';
+  }
+  const btn = document.getElementById('easyExport');
+  if (btn) btn.disabled = !S.svgString;
+}
+
+function updateModeUI() {
+  const btnMode = document.getElementById('btnMode');
+  if (btnMode) {
+    const label = mode === 'easy' ? 'Easy' : mode === 'strokes' ? 'Strokes' : 'Pipeline';
+    btnMode.textContent = `Mode: ${label}`;
+    btnMode.style.color       = mode !== 'pipeline' ? 'var(--accent)' : '';
+    btnMode.style.borderColor = mode !== 'pipeline' ? 'var(--accent)' : '';
+  }
+  // Pipeline-only buttons hidden outside pipeline mode.
+  const btnAutoAll  = document.getElementById('btnAutoAll');
+  const btnMultiPath = document.getElementById('btnMultiPath');
+  if (btnAutoAll)  btnAutoAll.style.display  = mode === 'pipeline' ? '' : 'none';
+  if (btnMultiPath) btnMultiPath.style.display = mode === 'pipeline' ? '' : 'none';
+  // Container visibility (only switch away from dropzone once an image exists).
+  const easy = document.getElementById('easy');
+  const pipeline = document.getElementById('pipeline');
+  if (S.imageData) {
+    if (easy)     easy.style.display     = mode === 'easy' ? 'flex' : 'none';
+    if (pipeline) pipeline.style.display = mode === 'easy' ? 'none' : 'flex';
+  }
+}
+
 function exportSVG() {
   if (!S.svgString) return;
   const blob = new Blob([S.svgString], { type: 'image/svg+xml' });
@@ -899,14 +1018,36 @@ function init() {
   const btnMode = document.getElementById('btnMode');
   if (btnMode) {
     btnMode.addEventListener('click', () => {
-      mode = mode === 'pipeline' ? 'strokes' : 'pipeline';
-      btnMode.textContent = `Mode: ${mode === 'strokes' ? 'Strokes' : 'Pipeline'}`;
-      btnMode.style.color       = mode === 'strokes' ? 'var(--accent)' : '';
-      btnMode.style.borderColor = mode === 'strokes' ? 'var(--accent)' : '';
-      createStepCards();
-      if (S.imageData) { showPipeline(); runFrom(0); }
+      mode = mode === 'easy' ? 'strokes' : mode === 'strokes' ? 'pipeline' : 'easy';
+      if (mode !== 'easy') createStepCards();
+      updateModeUI();
+      if (S.imageData) {
+        if (mode === 'easy') {
+          runEasy();
+        } else {
+          showPipeline();
+          runFrom(0);
+        }
+      }
     });
   }
+
+  const easyDetail = document.getElementById('easyDetail');
+  if (easyDetail) {
+    easyDetail.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-level]');
+      if (!btn) return;
+      easyLevel = btn.dataset.level;
+      easyDetail.querySelectorAll('button').forEach(b =>
+        b.classList.toggle('active', b === btn));
+      if (S.imageData && mode === 'easy') runEasy();
+    });
+  }
+
+  const easyExport = document.getElementById('easyExport');
+  if (easyExport) easyExport.addEventListener('click', exportSVG);
+
+  updateModeUI();
 }
 
 init();
