@@ -560,8 +560,8 @@ function drawGradient(ctx, pts, lineWidth = 1) {
 }
 
 function makeSVG(layers, w, h, sw) {
-  const paths = layers.map(({ d, color }) =>
-    `<path d="${d}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`
+  const paths = layers.map(({ d, color, width }) =>
+    `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width ?? sw}" stroke-linecap="round" stroke-linejoin="round"/>`
   ).join('\n');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
 <rect width="${w}" height="${h}" fill="white"/>
