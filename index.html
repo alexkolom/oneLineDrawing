@@ -308,6 +308,47 @@
     .btn-export:hover { background: var(--accent2); }
     .btn-export:disabled { opacity: 0.35; cursor: default; }
 
+    /* ── Easy mode ── */
+    #easy { display: flex; flex-direction: column; gap: 16px; }
+    .easy-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 16px;
+      background: var(--head);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .easy-detail-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .seg { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .seg button {
+      padding: 7px 16px;
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      border-right: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .seg button:last-child { border-right: none; }
+    .seg button:hover { color: var(--text); }
+    .seg button.active { background: var(--accent); color: #fff; }
+    .easy-result {
+      height: 560px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    #easy .btn-export { margin-left: auto; }
+
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: var(--bg); }
@@ -324,7 +365,7 @@
     <div class="header-right">
       <div class="status-badge" id="statusBadge">no image</div>
       <button class="btn-auto" id="btnAutoAll">Auto All</button>
-      <button class="btn-reset" id="btnMode">Mode: Pipeline</button>
+      <button class="btn-reset" id="btnMode">Mode: Easy</button>
       <button class="btn-reset" id="btnMultiPath">Multi-path: OFF</button>
       <button class="btn-reset" id="btnReset">Reset Settings</button>
       <label class="btn-load">
@@ -341,6 +382,19 @@
   </div>
 
   <div id="pipeline" style="display:none"></div>
+
+  <div id="easy" style="display:none">
+    <div class="easy-bar">
+      <span class="easy-detail-label">DETAIL</span>
+      <div class="seg" id="easyDetail">
+        <button type="button" data-level="low">Low</button>
+        <button type="button" data-level="mid" class="active">Mid</button>
+        <button type="button" data-level="high">High</button>
+      </div>
+      <button class="btn-export" id="easyExport" disabled>Export SVG</button>
+    </div>
+    <div class="svg-wrap easy-result" id="easyResult"></div>
+  </div>
 </div>
 
 <script type="module" src="app.js"></script>
