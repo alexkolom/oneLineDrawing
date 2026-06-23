@@ -5,6 +5,7 @@ import { ContourSimplifier } from './ContourSimplifier.js';
 import { PathPlanner }       from './PathPlanner.js';
 import { BezierPathBuilder } from './BezierPathBuilder.js';
 import { RegionTracer }      from './RegionTracer.js';
+import { Silhouette }        from './Silhouette.js';
 
 // ── Constants ──────────────────────────────────────────────────────────
 const MAX_SIZE = 600;
@@ -59,6 +60,7 @@ const P = {
 };
 const P_DEFAULTS = { ...P };
 let multiPath = false;
+let frameOn = false; // framing silhouette line — session state, default off
 const layerColors = ['#bbbbbb', '#777777', '#222222']; // [fine, medium, coarse]
 let layerThresholds = [85, 127, 170];                  // [fine, medium, coarse] — overwritten by Otsu3 on toggle-ON
 let mpSliderDebounce = null;
@@ -513,7 +515,18 @@ const STROKE_STEPS = [
       if (!SS.linkedPath?.length) { S.svgString = ''; return; }
       const smoothed = BezierPathBuilder.smoothFactor(SS.linkedPath, P.strokeSmooth);
       const d        = BezierPathBuilder.build(smoothed, 0.5);
-      S.svgString    = d ? makeSVG([{ d, color: 'black' }], W, H, P.strokeWidth) : '';
+      if (!d) { S.svgString = ''; return; }
+      const layers = [];
+      if (frameOn) {
+        const frameD = Silhouette.buildPath(SS.massContours || [], {
+          simplifyEps: 0.006 * diag(),
+          smooth: 1.5,
+        });
+        // pushed first → renders underneath the detail line
+        if (frameD) layers.push({ d: frameD, color: 'black', width: Math.max(2, P.strokeWidth * 2.5) });
+      }
+      layers.push({ d, color: 'black' });
+      S.svgString = makeSVG(layers, W, H, P.strokeWidth);
     },
     draw() {},
     stat() { return S.svgString ? `${(S.svgString.length / 1024).toFixed(1)} KB` : '—'; },
