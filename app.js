@@ -106,6 +106,40 @@ function resetParams() {
 // ── Step definitions ────────────────────────────────────────────────────
 function diag() { return Math.sqrt(W * W + H * H) || 1; }
 
+// ── Easy mode: detail-level table + auto-deriver ─────────────────────────
+// Each level sets a coherent set of downstream knobs. Coverage targets are
+// fractions of foreground (dark) pixels we DEMAND to exist, so contours can
+// never vanish regardless of the image. Numbers are tuned starting points.
+const EASY_LEVELS = {
+  low:  { massCoverage: 0.10, layerCoverage: 0.04, strokeAbstraction: 0.80, strokeSmooth: 4.0, minLoopArcFrac: 0.08, strokeWidth: 1.5 },
+  mid:  { massCoverage: 0.18, layerCoverage: 0.08, strokeAbstraction: 0.50, strokeSmooth: 2.0, minLoopArcFrac: 0.04, strokeWidth: 1.0 },
+  high: { massCoverage: 0.28, layerCoverage: 0.14, strokeAbstraction: 0.25, strokeSmooth: 0.8, minLoopArcFrac: 0.02, strokeWidth: 1.0 },
+};
+
+// Pure: (grayscale Uint8Array, level) -> full Easy param set.
+// Step 1 auto-levels from the histogram (fixes "tone wrong").
+// Step 2 picks thresholds by target coverage (fixes "missed contours").
+function deriveEasyParams(gray, level) {
+  const cfg = EASY_LEVELS[level] || EASY_LEVELS.mid;
+  const { blackPoint, whitePoint } = EdgeDetector.analyzeHistogram(gray);
+  // Gamma from mean brightness: dark images get lifted, bright left neutral.
+  let sum = 0;
+  for (const v of gray) sum += v;
+  const mean = sum / gray.length; // 0..255
+  const gamma = mean < 100 ? 0.70 : mean > 170 ? 1.00 : 0.85;
+  const leveled = EdgeDetector.levels(gray, blackPoint, whitePoint, gamma);
+  const threshold      = Thresholder.thresholdForCoverage(leveled, cfg.massCoverage);
+  const layerThreshold = Thresholder.thresholdForCoverage(leveled, cfg.layerCoverage);
+  return {
+    blackPoint, whitePoint, gamma,
+    threshold, layerThreshold,
+    strokeAbstraction: cfg.strokeAbstraction,
+    strokeSmooth:      cfg.strokeSmooth,
+    minLoopArcFrac:    cfg.minLoopArcFrac,
+    strokeWidth:       cfg.strokeWidth,
+  };
+}
+
 const STEPS = [
   {
     num: '01', name: 'ORIGINAL IMAGE',
