@@ -108,18 +108,33 @@ function resetParams() {
 function diag() { return Math.sqrt(W * W + H * H) || 1; }
 
 // ── Easy mode: detail-level table + auto-deriver ─────────────────────────
-// Each level sets a coherent set of downstream knobs. Coverage targets are
-// fractions of foreground (dark) pixels we DEMAND to exist, so contours can
-// never vanish regardless of the image. Numbers are tuned starting points.
+// Design: the SILHOUETTE always uses the proven Otsu threshold (the same one
+// the manual path uses), so the subject's outline is never cut. The detail
+// dial controls how much INTERIOR detail to add (deeper-shadow layers + loop
+// pruning) and how tightly the line hugs contours (abstraction). Coverage is
+// used only as a safety FLOOR — it bumps the threshold up if Otsu lands on a
+// near-empty result on a very low-contrast image. It never overrides a good
+// Otsu silhouette. Numbers are tunable starting points.
 const EASY_LEVELS = {
-  low:  { massCoverage: 0.10, layerCoverage: 0.04, strokeAbstraction: 0.80, strokeSmooth: 4.0, minLoopArcFrac: 0.08, strokeWidth: 1.5 },
-  mid:  { massCoverage: 0.18, layerCoverage: 0.08, strokeAbstraction: 0.50, strokeSmooth: 2.0, minLoopArcFrac: 0.04, strokeWidth: 1.0 },
-  high: { massCoverage: 0.28, layerCoverage: 0.14, strokeAbstraction: 0.25, strokeSmooth: 0.8, minLoopArcFrac: 0.02, strokeWidth: 1.0 },
+  // layerDepth scales the dark Otsu-3 boundary: <1 pushes it darker (less
+  // interior detail), 1.0 keeps the full interior. minMassCoverage is the
+  // ink-floor safety net only.
+  low:  { minMassCoverage: 0.05, layerDepth: 0.45, strokeAbstraction: 0.30, strokeSmooth: 3.0, minLoopArcFrac: 0.07, strokeWidth: 1.5 },
+  mid:  { minMassCoverage: 0.06, layerDepth: 0.75, strokeAbstraction: 0.12, strokeSmooth: 1.5, minLoopArcFrac: 0.04, strokeWidth: 1.0 },
+  high: { minMassCoverage: 0.07, layerDepth: 1.00, strokeAbstraction: 0.00, strokeSmooth: 0.6, minLoopArcFrac: 0.02, strokeWidth: 1.0 },
 };
 
+// Fraction of pixels with value <= t (i.e. foreground under Thresholder.apply).
+function coverageAt(gray, t) {
+  let n = 0;
+  for (const v of gray) if (v <= t) n++;
+  return gray.length ? n / gray.length : 0;
+}
+
 // Pure: (grayscale Uint8Array, level) -> full Easy param set.
-// Step 1 auto-levels from the histogram (fixes "tone wrong").
-// Step 2 picks thresholds by target coverage (fixes "missed contours").
+// Auto-levels from the histogram (fixes "tone wrong"), anchors the silhouette
+// on Otsu with a coverage floor (fixes "missed contours" without cutting the
+// subject), and scales interior detail + abstraction by detail level.
 function deriveEasyParams(gray, level) {
   const cfg = EASY_LEVELS[level] || EASY_LEVELS.mid;
   const { blackPoint, whitePoint } = EdgeDetector.analyzeHistogram(gray);
@@ -129,8 +144,17 @@ function deriveEasyParams(gray, level) {
   const mean = sum / gray.length; // 0..255
   const gamma = mean < 100 ? 0.70 : mean > 170 ? 1.00 : 0.85;
   const leveled = EdgeDetector.levels(gray, blackPoint, whitePoint, gamma);
-  const threshold      = Thresholder.thresholdForCoverage(leveled, cfg.massCoverage);
-  const layerThreshold = Thresholder.thresholdForCoverage(leveled, cfg.layerCoverage);
+
+  // Silhouette: Otsu (proven), raised to the ink floor only if too sparse.
+  let threshold = Thresholder.otsu(leveled);
+  if (coverageAt(leveled, threshold) < cfg.minMassCoverage) {
+    threshold = Thresholder.thresholdForCoverage(leveled, cfg.minMassCoverage);
+  }
+
+  // Interior detail: the dark Otsu-3 boundary, pushed deeper for lower levels.
+  const [t1] = Thresholder.otsu3(leveled);
+  const layerThreshold = Math.max(0, Math.round(t1 * cfg.layerDepth));
+
   return {
     blackPoint, whitePoint, gamma,
     threshold, layerThreshold,
