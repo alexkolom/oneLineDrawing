@@ -845,6 +845,22 @@ function createStepCards() {
         exportBtn.addEventListener('click', exportSVG);
         ctrl.appendChild(exportBtn);
 
+        if (mode === 'strokes') {
+          const frameBtn = document.createElement('button');
+          frameBtn.className = 'btn-reset';
+          frameBtn.textContent = `Frame: ${frameOn ? 'ON' : 'OFF'}`;
+          frameBtn.style.color       = frameOn ? 'var(--accent)' : '';
+          frameBtn.style.borderColor = frameOn ? 'var(--accent)' : '';
+          frameBtn.addEventListener('click', () => {
+            frameOn = !frameOn;
+            frameBtn.textContent = `Frame: ${frameOn ? 'ON' : 'OFF'}`;
+            frameBtn.style.color       = frameOn ? 'var(--accent)' : '';
+            frameBtn.style.borderColor = frameOn ? 'var(--accent)' : '';
+            if (S.imageData) runFrom(4);
+          });
+          ctrl.appendChild(frameBtn);
+        }
+
         // Multi-path layer controls (hidden until toggle is on) — pipeline mode only
         if (mode === 'pipeline') {
         const mpDiv = document.createElement('div');
@@ -1059,6 +1075,17 @@ function init() {
 
   const easyExport = document.getElementById('easyExport');
   if (easyExport) easyExport.addEventListener('click', exportSVG);
+
+  const easyFrame = document.getElementById('easyFrame');
+  if (easyFrame) {
+    easyFrame.addEventListener('click', () => {
+      frameOn = !frameOn;
+      easyFrame.textContent = `Frame: ${frameOn ? 'ON' : 'OFF'}`;
+      easyFrame.style.color       = frameOn ? 'var(--accent)' : '';
+      easyFrame.style.borderColor = frameOn ? 'var(--accent)' : '';
+      if (S.imageData && mode === 'easy') runEasy();
+    });
+  }
 
   updateModeUI();
 }
