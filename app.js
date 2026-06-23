@@ -517,10 +517,14 @@ const STROKE_STEPS = [
       const d        = BezierPathBuilder.build(smoothed, 0.5);
       if (!d) { S.svgString = ''; return; }
       const layers = [];
-      if (frameOn) {
-        const frameD = Silhouette.buildPath(SS.massContours || [], {
-          simplifyEps: 0.006 * diag(),
-          smooth: 1.5,
+      if (frameOn && SS.massBinary) {
+        // Approach B: clean envelope from the mask, not a copy of the contours.
+        const dg = diag();
+        const frameD = Silhouette.fromMask(SS.massBinary, W, H, {
+          closeRadius: Math.max(2, Math.round(dg * 0.005)),
+          dilateRadius: Math.max(1, Math.round(dg * 0.003)),
+          simplifyEps: 0.004 * dg,
+          smooth: 2,
         });
         // pushed first → renders underneath the detail line
         if (frameD) layers.push({ d: frameD, color: 'black', width: Math.max(2, P.strokeWidth * 2.5) });

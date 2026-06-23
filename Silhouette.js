@@ -1,8 +1,12 @@
 import { ContourSimplifier } from './ContourSimplifier.js';
 import { BezierPathBuilder } from './BezierPathBuilder.js';
+import { RegionTracer } from './RegionTracer.js';
+import { Morphology } from './Morphology.js';
 
-// Builds the subject's outer silhouette as a single SVG path, reusing the
-// outer-boundary loops already traced by RegionTracer (e.g. SS.massContours).
+// Builds the subject's outer silhouette as a single SVG path. The preferred
+// entry point is fromMask(): it cleans the threshold mask (close + fill holes
+// + slight outward dilate) so the frame is one smooth envelope sitting just
+// outside the detail line, rather than a duplicate of the existing contours.
 export class Silhouette {
   // Absolute polygon area via the shoelace formula. loop: array of {x,y}.
   static area(loop) {
@@ -41,5 +45,30 @@ export class Silhouette {
     if (!pts.length) return '';
     const smoothed = BezierPathBuilder.smoothFactor(pts, smooth);
     return BezierPathBuilder.build(smoothed, tension);
+  }
+
+  // Approach B: derive a clean silhouette directly from a binary mask.
+  // Morphologically close (bridge gaps + smooth), fill interior holes, then
+  // dilate slightly so the frame sits just OUTSIDE the detail line. Traces the
+  // single largest outer boundary and returns one smooth SVG path. Returns ''
+  // when the mask is empty or yields no usable loop.
+  static fromMask(binary, width, height, {
+    closeRadius = 2, dilateRadius = 2, simplifyEps = 2, smooth = 2, tension = 0.5,
+  } = {}) {
+    if (!binary || !binary.length) return '';
+    let mask = Morphology.close(binary, width, height, closeRadius);
+    mask = Morphology.fillHoles(mask, width, height);
+    if (dilateRadius > 0) mask = Morphology.dilate(mask, width, height, dilateRadius);
+
+    const loops = RegionTracer.trace(mask, width, height);
+    if (!loops.length) return '';
+    let best = loops[0], bestA = this.area(best);
+    for (const l of loops) {
+      const a = this.area(l);
+      if (a > bestA) { bestA = a; best = l; }
+    }
+    if (bestA <= 0) return '';
+    // Reuse buildPath for the single largest loop (simplify → close → smooth → build).
+    return this.buildPath([best], { simplifyEps, smooth, tension });
   }
 }
