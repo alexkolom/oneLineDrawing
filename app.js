@@ -61,6 +61,9 @@ const P = {
 const P_DEFAULTS = { ...P };
 let multiPath = false;
 let frameOn = false; // framing silhouette line — session state, default off
+// How far the frame threshold moves from the detail threshold toward the
+// background (255). Higher = encloses more of the object. 0 = same as detail.
+const FRAME_INCLUDE = 0.6;
 const layerColors = ['#bbbbbb', '#777777', '#222222']; // [fine, medium, coarse]
 let layerThresholds = [85, 127, 170];                  // [fine, medium, coarse] — overwritten by Otsu3 on toggle-ON
 let mpSliderDebounce = null;
@@ -517,10 +520,14 @@ const STROKE_STEPS = [
       const d        = BezierPathBuilder.build(smoothed, 0.5);
       if (!d) { S.svgString = ''; return; }
       const layers = [];
-      if (frameOn && SS.massBinary) {
-        // Approach B: clean envelope from the mask, not a copy of the contours.
+      if (frameOn && SS.leveled) {
+        // Approach B: clean envelope from a MORE INCLUSIVE mask than the detail
+        // threshold — push the cut toward the (bright) background so the whole
+        // object, including highlights, becomes one solid blob to enclose.
         const dg = diag();
-        const frameD = Silhouette.fromMask(SS.massBinary, W, H, {
+        const frameT     = Math.min(254, Math.round(P.threshold + (255 - P.threshold) * FRAME_INCLUDE));
+        const frameMask  = Thresholder.apply(SS.leveled, frameT);
+        const frameD = Silhouette.fromMask(frameMask, W, H, {
           closeRadius: Math.max(2, Math.round(dg * 0.005)),
           dilateRadius: Math.max(1, Math.round(dg * 0.003)),
           simplifyEps: 0.004 * dg,
