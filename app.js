@@ -533,8 +533,8 @@ const STROKE_STEPS = [
           simplifyEps: 0.004 * dg,
           smooth: 2,
         });
-        // pushed first → renders underneath the detail line
-        if (frameD) layers.push({ d: frameD, color: 'black', width: Math.max(2, P.strokeWidth * 2.5) });
+        // pushed first → renders underneath the detail line (same width as the rest)
+        if (frameD) layers.push({ d: frameD, color: 'black' });
       }
       layers.push({ d, color: 'black' });
       S.svgString = makeSVG(layers, W, H, P.strokeWidth);
